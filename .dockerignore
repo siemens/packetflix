@@ -1,0 +1,7 @@
+.vscode/
+.emptyctx/
+deployments/
+images/
+/packetflix
+scripts/
+dist/
