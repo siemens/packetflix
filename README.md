@@ -56,7 +56,7 @@ namespaces, as well as mount points with their hierarchies.
 
 Since _micro services never look cool_, here's a screenshot of a Desktop
 Wireshark session instead: here, we're going to capture from containers in a
-Kubernetes cluster:
+Docker host:
 
 ![Binge Watching Packet Captures](images/cs-docker-defaulttab.png)
 
