@@ -41,8 +41,8 @@ users it is strongly recommended to install docker-ce instead of docker.io
 packages, as these are updated on a regular basis.
 
 ```bash
-wget -q -O - \
-  https://github.com/siemens/edgeshark/raw/master/deployments/wget/docker-compose.yaml \
+wget -q --no-cache -O - \
+  https://github.com/siemens/edgeshark/raw/main/deployments/wget/docker-compose.yaml \
   | docker compose -f - up
 ```
 
