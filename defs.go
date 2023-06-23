@@ -2,7 +2,8 @@
 //
 // SPDX-License-Identifier: MIT
 
-// Common definitions and globals (settings).
+//go:generate go run ./internal/gen/version
+
 package main
 
 import (
@@ -10,9 +11,6 @@ import (
 )
 
 const (
-	// SemVersion is the semantic version of this CaaS.
-	SemVersion = "0.16.5"
-
 	// DefaultPacketFlixServicePort specifies the default service port number.
 	DefaultPacketFlixServicePort = 5001
 
