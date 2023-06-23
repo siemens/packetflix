@@ -77,7 +77,7 @@ func parseCaptureParams(req *http.Request, conn *WSConn) (
 	} else if netnsok {
 		// ...else create a simple container meta data set from the few things
 		// we were only given.
-		if netns, err := strconv.ParseInt(netnsp[0], 10, 64); err == nil && netns > 0 {
+		if netns, err := strconv.ParseInt(netnsp[0], 10, strconv.IntSize); err == nil && netns > 0 {
 			args = new(Args)
 			args.Target = new(api.Target)
 			args.Target.NetNS = int(netns)
