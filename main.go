@@ -66,24 +66,6 @@ func requestLogger(h http.Handler) http.Handler {
 			-1,
 			req.Referer(),
 			req.UserAgent())
-		// When logging HTTP/WS headers, remove the sensitive Authorization
-		// values from the headers, but leave the keys in place...
-		saneh := []string{}
-		for key, values := range req.Header {
-			if key == "Authorization" {
-				sanevals := []string{}
-				for _, el := range values {
-					if f := strings.Fields(el); len(f) > 1 {
-						sanevals = append(sanevals, f[0]+" ***")
-					} else {
-						sanevals = append(sanevals, "***")
-					}
-				}
-				values = sanevals
-			}
-			saneh = append(saneh, fmt.Sprintf("\t%s: %s", key, strings.Join(values, " ")))
-		}
-		log.Debugf("HTTP headers:\n%s", strings.Join(saneh, "\n"))
 		// Hand over to the (de)muxer handler...
 		h.ServeHTTP(w, req)
 	})
