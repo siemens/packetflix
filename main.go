@@ -16,7 +16,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"math/rand"
 	"net/http"
 	"runtime"
 	"strings"
@@ -81,13 +80,6 @@ func main() {
 	// the ealdorman in a network namespace different from its container's
 	// network namespace.
 	runtime.LockOSThread()
-
-	// Seed the random number generator from the current time ... this is
-	// perfectly acceptable in our case since we won't do any crypto dances
-	// lateron, so this miserable randomness will suffice: we only need it to
-	// generate random capture stream "pet names" which aren't the same sequence
-	// on any restart.
-	rand.Seed(time.Now().UTC().UnixNano())
 
 	log.SetFormatter(&log.TextFormatter{
 		ForceColors:   true,
