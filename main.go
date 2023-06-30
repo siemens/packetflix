@@ -107,11 +107,11 @@ func main() {
 	flaggy.Bool(&LogRequestHeaders, "", "log-headers", "log frontend HTTP/WS request headers")
 
 	flaggy.UInt16(&Port, "p", "port",
-		fmt.Sprintf("port to expose capture service on (default: %d)", Port))
+		"port to expose capture service on")
 	flaggy.String(&DiscoveryService, "", "discovery-service",
-		fmt.Sprintf("name/address of discovery service (default: %q)", DiscoveryService))
+		"name/address of discovery service")
 	flaggy.UInt16(&DiscoveryPort, "", "gw-port",
-		fmt.Sprintf("port of local GhostWire discovery service (default: %d)", DiscoveryPort))
+		"port of local GhostWire discovery service")
 	flaggy.Bool(&ProxyDiscoveryService, "", "proxy-discovery",
 		fmt.Sprintf("enable/disable proxy discovery service SPA and API (default: %t)", ProxyDiscoveryService))
 
