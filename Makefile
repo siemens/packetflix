@@ -1,7 +1,7 @@
 
 GOGEN = go generate .
 
-.PHONY: help deploy undeploy dist
+.PHONY: help deploy undeploy dist vuln
 
 help: ## list available targets
 	@# Derived from Gomega's Makefile (github.com/onsi/gomega) under MIT License
@@ -15,6 +15,9 @@ deploy: ## deploy Packetflix service exposed on host port 5001
 
 undeploy: ## remove any Packetflix service deployment
 	docker compose -p packetflix -f deployments/packetflix/docker-compose.yaml down
+
+vuln: ## run go vulnerabilities check
+	@scripts/vuln.sh
 
 dist: ## build multi-arch image (amd64, arm64) and push to local running registry on port 5999.
 	scripts/multiarch-builder.sh
