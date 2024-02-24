@@ -8,9 +8,9 @@
 # Nota bene: not all existing value combinations with respect to Alpine and Node
 # versions might work, so you'll need to check Docker hub for the available base
 # image versions.
-ARG ALPINE_VERSION=3.18
-ARG ALPINE_PATCH=5
-ARG GO_VERSION=1.21.4
+ARG ALPINE_VERSION=3.19
+ARG ALPINE_PATCH=1
+ARG GO_VERSION=1.21.7
 
 # 0th stage: https://github.com/tonistiigi/xx/blob/master/README.md
 FROM --platform=${BUILDPLATFORM} tonistiigi/xx AS cc-helpers

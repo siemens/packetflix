@@ -4,4 +4,4 @@
 package main
 
 // SemVersion is the semantic version string of the packetflix module.
-const SemVersion = "0.9.0-2-g49800dd"
+const SemVersion = "0.9.6"
