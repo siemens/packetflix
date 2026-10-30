@@ -38,8 +38,7 @@ var _ = Describe("grumbler", func() {
 		Expect(g.Reason()).To(BeEmpty())
 	})
 
-	// pending: Grumbler.Write has a value receiver, so it forgets being frozen.
-	PIt("keeps only the first error line, even across later writes", func() {
+	It("keeps only the first error line, even across later writes", func() {
 		g := NewGrumbler(NewWSConn())
 		Expect(g.Write([]byte("dumpcap: oops\n"))).Error().NotTo(HaveOccurred())
 		Expect(g.Write([]byte("more details\n"))).Error().NotTo(HaveOccurred())
