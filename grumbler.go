@@ -36,53 +36,41 @@ func NewGrumbler(conn *WSConn) *Grumbler {
 // reason text for the websocket close control message to give capture clients
 // an indication as to www -- what went wrong. Please note that we expect
 // grumbling to eventually be terminated by \n so we only log at these points.
-func (g *Grumbler) Write(grumble []byte) (n int, err error) {
-	n = len(grumble)
-	// As long as the reason string isn't yet frozen we keep adding grumbling
-	// to it. The reason is that nsenter grumbles as multiple pieces until it
-	// finally is finished. Oh, and wipe out those pesky \r that cause trouble
-	// further down the road since we're removing \n anyway.
+func (g *Grumbler) Write(grumble []byte) (int, error) {
+	// Wipe out those pesky \r that cause trouble further down the road since
+	// we're removing \n anyway.
 	grrr := strings.ReplaceAll(string(grumble), "\r", "")
 	for {
-		if i := strings.IndexRune(grrr, '\n'); i >= 0 {
-			// Looks like we've got now what could be a complete line...
+		line, rest, complete := strings.Cut(grrr, "\n")
+		if !complete {
+			// Not terminated by \n, so keep on collecting (unless already
+			// frozen) and wait for the next round.
 			if !g.frozenr {
-				g.r += grrr[:i]
-				// ...so check if its really something important that we could
-				// use later as a reason text for a websocket close control
-				// message, or just some murmuring.
-				if !strings.HasPrefix(g.r, StdErrCapturePrefix) {
-					// Just mumbling, so throw it away and try to make
-					// some sense of the rest...
-					g.log.Debug("capture process", slog.String("stderr", g.r))
-					g.r = ""
-					grrr = grrr[i+1:]
-				} else {
-					// First error message line complete, so log this also as
-					// an error. Then process any "overspill" as ordinary
-					// mumbling instead of an error. This way, the log will
-					// contain all of the error message.
-					g.frozenr = true
-					g.log.Error("capture process", slog.String("stderr", g.r))
-					grrr = grrr[i+1:]
-				}
-			} else {
-				// We've already a complete and thus frozen reason line, so we
-				// now just log all other lines (mumble, mumble)...
-				g.log.Debug("capture process mumble", slog.String("stderr", grrr[:i]))
-				grrr = grrr[i+1:]
+				g.r += line
 			}
-		} else {
-			// Still no complete line; that is, not terminated by \n. So
-			// keep on collecting and wait for the next round. But only, if
-			// we're not already frozen.
-			if !g.frozenr {
-				g.r += grrr
-			}
-			break
+			return len(grumble), nil
 		}
+		g.grumbleLine(line)
+		grrr = rest
 	}
-	return
+}
+
+// grumbleLine handles a complete line of grumbling: the first line starting
+// with the capture program's error prefix becomes the frozen reason and gets
+// logged as an error, all other lines are just mumbling.
+func (g *Grumbler) grumbleLine(line string) {
+	if g.frozenr {
+		g.log.Debug("capture process mumble", slog.String("stderr", line))
+		return
+	}
+	g.r += line
+	if !strings.HasPrefix(g.r, StdErrCapturePrefix) {
+		g.log.Debug("capture process", slog.String("stderr", g.r))
+		g.r = ""
+		return
+	}
+	g.frozenr = true
+	g.log.Error("capture process", slog.String("stderr", g.r))
 }
 
 // Reason returns the grumbling reason why something failed miserably. It strips

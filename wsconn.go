@@ -11,6 +11,7 @@
 package packetflix
 
 import (
+	"errors"
 	"log/slog"
 	"os"
 	"strings"
@@ -101,14 +102,15 @@ func NewWSConn() *WSConn {
 // itself. It ensures that this signal is sent only once, even when triggering
 // this method multiple times.
 func (c *WSConn) Terminate() {
-	if c.Process != nil {
-		c.terminateOnce.Do(func() {
-			c.log.Debug("signalling capture process to terminate")
-			if err := c.Signal(syscall.SIGTERM); err != nil {
-				c.log.Debug("cannot signal capture process", xslog.Error(err))
-			}
-		})
+	if c.Process == nil {
+		return
 	}
+	c.terminateOnce.Do(func() {
+		c.log.Debug("signalling capture process to terminate")
+		if err := c.Signal(syscall.SIGTERM); err != nil {
+			c.log.Debug("cannot signal capture process", xslog.Error(err))
+		}
+	})
 }
 
 // Watch watches the websocket connection for any signs of closing or failure.
@@ -116,42 +118,41 @@ func (c *WSConn) Terminate() {
 // a client's graceful acknowledge.
 func (c *WSConn) Watch() {
 	c.log.Debug("watching websocket connection")
-	for {
-		_, _, err := c.ReadMessage()
-		if err != nil {
-			if cerr, ok := err.(*websocket.CloseError); ok {
-				// It is not an error, but instead a close control message by
-				// the client. We now need to see if we need to acknowledge it
-				// or if it was the final close message in the handshake...
-				switch c.state {
-				case WSConnOpen:
-					// Let's try to gracefully acknowledge the close, and then
-					// we're done.
-					c.state = WSConnClosed
-					c.log.Debug("capture client closing",
-						slog.Int("code", cerr.Code), slog.String("reason", cerr.Text))
-					c.log.Debug("acknowledging close (ciao!)")
-					_ = c.SetWriteDeadline(time.Now().Add(ClosingDeadline))
-					_ = c.WriteMessage(
-						websocket.CloseMessage,
-						websocket.FormatCloseMessage(cerr.Code, "ciao"))
-				case WSConnClosing:
-					// It is already the final ack, so we're done now too.
-					c.state = WSConnClosed
-					c.log.Debug("capture client acknowledged close",
-						slog.Int("code", cerr.Code), slog.String("reason", cerr.Text))
-				}
-			}
-			// Any error means that the websocket is broken, and any close means
-			// that we're done by now. So release resources.
-			c.Terminate()
-			c.log.Debug("websocket closed")
-			_ = c.Close()
-			return
-		}
-		// Whatever the websocket client is sending us ... we'll ignore it. And
-		// we need to keep listening in order to correctly process incomming
-		// control messages.
+	// Whatever the websocket client is sending us ... we'll ignore it. But we
+	// need to keep listening in order to correctly process incoming control
+	// messages.
+	var err error
+	for err == nil {
+		_, _, err = c.ReadMessage()
+	}
+	if cerr, ok := errors.AsType[*websocket.CloseError](err); ok {
+		c.handleClose(cerr)
+	}
+	// Any error means that the websocket is broken, and any close means that
+	// we're done by now. So release resources.
+	c.Terminate()
+	c.log.Debug("websocket closed")
+	_ = c.Close()
+}
+
+// handleClose handles a close control message by the client: we either need to
+// acknowledge it, or it is the final close message in the handshake we
+// started.
+func (c *WSConn) handleClose(cerr *websocket.CloseError) {
+	switch c.state {
+	case WSConnOpen:
+		c.state = WSConnClosed
+		c.log.Debug("capture client closing",
+			slog.Int("code", cerr.Code), slog.String("reason", cerr.Text))
+		c.log.Debug("acknowledging close (ciao!)")
+		_ = c.SetWriteDeadline(time.Now().Add(ClosingDeadline))
+		_ = c.WriteMessage(
+			websocket.CloseMessage,
+			websocket.FormatCloseMessage(cerr.Code, "ciao"))
+	case WSConnClosing:
+		c.state = WSConnClosed
+		c.log.Debug("capture client acknowledged close",
+			slog.Int("code", cerr.Code), slog.String("reason", cerr.Text))
 	}
 }
 
@@ -162,27 +163,29 @@ func (c *WSConn) Watch() {
 // then the websocket will be closed immediately and the capture process
 // terminated.
 func (c *WSConn) InitiateGracefulClose(code int, reason string) {
-	if c.state == WSConnOpen {
-		// Close frame payloads are limited to 125 octets, including the 2 octet
-		// code, and must be valid UTF-8.
-		if len(reason) > 123 {
-			reason = reason[:123]
-		}
-		reason = strings.ToValidUTF8(reason, "")
-		c.log.Debug("beginning graceful websocket connection close",
-			slog.Int("code", code), slog.String("reason", reason))
-		_ = c.SetWriteDeadline(time.Now().Add(ClosingDeadline))
-		c.state = WSConnClosing
-		err := c.WriteMessage(
-			websocket.CloseMessage,
-			websocket.FormatCloseMessage(code, reason))
-		if err != nil {
-			c.state = WSConnClosed
-			c.log.Error("sending graceful close control message failed", xslog.Error(err))
-			c.Terminate()
-			_ = c.Close()
-		}
+	if c.state != WSConnOpen {
+		return
 	}
+	// Close frame payloads are limited to 125 octets, including the 2 octet
+	// code, and must be valid UTF-8.
+	if len(reason) > 123 {
+		reason = reason[:123]
+	}
+	reason = strings.ToValidUTF8(reason, "")
+	c.log.Debug("beginning graceful websocket connection close",
+		slog.Int("code", code), slog.String("reason", reason))
+	_ = c.SetWriteDeadline(time.Now().Add(ClosingDeadline))
+	c.state = WSConnClosing
+	err := c.WriteMessage(
+		websocket.CloseMessage,
+		websocket.FormatCloseMessage(code, reason))
+	if err == nil {
+		return
+	}
+	c.state = WSConnClosed
+	c.log.Error("sending graceful close control message failed", xslog.Error(err))
+	c.Terminate()
+	_ = c.Close()
 }
 
 // GracefullyClose runs a complete graceful close handshake and only returns
@@ -191,8 +194,9 @@ func (c *WSConn) InitiateGracefulClose(code int, reason string) {
 // asynchronous InitiateGracefulClose because there's already a Watch() on this
 // websocket as well as a Wait() on the capture process running in parallel.
 func (c *WSConn) GracefullyClose(code int, reason string) {
-	if c.state == WSConnOpen {
-		c.InitiateGracefulClose(code, reason)
-		c.Watch()
+	if c.state != WSConnOpen {
+		return
 	}
+	c.InitiateGracefulClose(code, reason)
+	c.Watch()
 }

@@ -196,20 +196,19 @@ func (h *captureHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	go func() {
 		defer wg.Done()
 		err := cmd.Wait()
-		if err != nil {
-			conn.log.Error("capture process failure", xslog.Error(err))
-			r := grrr.Reason()
-			if len(r) == 0 && !piper.Failed {
-				r = "capture process failed"
-			}
-			if len(r) == 0 {
-				conn.InitiateGracefulClose(websocket.CloseNormalClosure, "ciao")
-			} else {
-				conn.InitiateGracefulClose(websocket.CloseInternalServerErr, r)
-			}
-		} else {
+		if err == nil {
 			conn.log.Debug("capture process terminated successfully")
 			conn.InitiateGracefulClose(websocket.CloseNormalClosure, "capture process terminated")
+			return
+		}
+		conn.log.Error("capture process failure", xslog.Error(err))
+		switch reason := grrr.Reason(); {
+		case reason != "":
+			conn.InitiateGracefulClose(websocket.CloseInternalServerErr, reason)
+		case piper.Failed:
+			conn.InitiateGracefulClose(websocket.CloseNormalClosure, "ciao")
+		default:
+			conn.InitiateGracefulClose(websocket.CloseInternalServerErr, "capture process failed")
 		}
 	}()
 	// Wait for both the watcher/reader and the process waiter to finish.

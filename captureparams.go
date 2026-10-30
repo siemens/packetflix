@@ -15,6 +15,8 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -35,115 +37,23 @@ type Args struct {
 // parseCaptureParams parses the capture parameters from the HTTP request,
 // refreshing stale target information from the discovery service at the
 // specified "host:port" address.
-func parseCaptureParams(req *http.Request, conn *WSConn, discovery string) (
-	args *Args, err error) {
-	params := req.URL.Query()
-	// "Würgs" (works) around a bug in the Kubernetes remote API pod proxy verb:
-	// this bug drops the URL query parameters from a websocket connect. So to
-	// get our job done, we resort to use application-specific
-	// (service-specific) HTTP headers, which we then here map back onto their
-	// original URL query parameters. In consequence, the service-specific HTTP
-	// headers always take precedence.
-	//
-	// Nota bene: the Go http package insists of canonical header keys, see:
-	// https://godoc.org/net/http#CanonicalHeaderKey. This means that the first
-	// letter as well as any letters immediately following a hyphen will be
-	// upper case.
-	if cntr, ok := req.Header["Clustershark-Container"]; ok {
-		params["container"] = cntr
+func parseCaptureParams(req *http.Request, conn *WSConn, discovery string) (*Args, error) {
+	params := captureQuery(req)
+	target, err := targetFromParams(params)
+	if err != nil {
+		return nil, err
 	}
-	if nifs, ok := req.Header["Clustershark-Nif"]; ok {
-		params["nif"] = nifs
-	}
-	if filter, ok := req.Header["Clustershark-Filter"]; ok {
-		params["filter"] = filter
-	}
-	if chaste, ok := req.Header["Clustershark-Chaste"]; ok {
-		params["chaste"] = chaste
-	}
-
-	// Please note that the "container" and "netns" URL query parameters are
-	// mutually exclusive: there can be only one of them present.
-	cp, cok := params["container"]
-	netnsp, netnsok := params["netns"]
-	if cok && netnsok {
-		return nil, fmt.Errorf("container and netns query parameters are mutually exclusive")
-	}
-	if cok {
-		// If a full-blown container meta data query parameter is present, then use
-		// this one...
-		args = new(Args)
-		args.Target = new(api.Target)
-		if err := json.Unmarshal([]byte(cp[0]), args.Target); err != nil {
-			return nil, fmt.Errorf("invalid container/target description: %s", err.Error())
-		}
-	} else if netnsok {
-		// ...else create a simple container meta data set from the few things
-		// we were only given.
-		if netns, err := strconv.ParseInt(netnsp[0], 10, strconv.IntSize); err == nil && netns > 0 {
-			args = new(Args)
-			args.Target = new(api.Target)
-			args.NetNS = int(netns)
-		} else {
-			return nil, fmt.Errorf("invalid netns \"%s\"", netnsp[0])
-		}
-	} else {
-		return nil, fmt.Errorf("either container or netns query parameter required")
-	}
-
-	// With all (or only some) information gathered into the container meta data
-	// description, now check whether the data is still current or has turned
-	// stale. This can be verified on the basis of the given PID (usually the
-	// "root" process inside a container) and its corresponding start time. If
-	// the process is gone, we assume the information to be stale in order to
-	// trigger a meta data refresh below.
-	if args.Pid > 0 && args.StartTime > 0 {
-		if proc := model.NewProcess(model.PIDType(args.Pid), false); proc == nil ||
-			proc.Starttime != uint64(args.StartTime) {
-			args.NetNS = 0
-		}
-	}
+	args := &Args{Target: target}
 
 	// If we got unlucky, then we now need to fetch up-to-date information from
 	// the discovery service: we need a correct network namespace identifier.
+	if !isCurrent(args.Target) {
+		args.NetNS = 0
+	}
 	if args.NetNS == 0 {
-		conn.log.Debug("updating container meta data from local discovery service", slog.String("discovery", discovery))
-		httpc := &http.Client{Timeout: DiscoveryDeadline}
-		resp, err := httpc.Get(fmt.Sprintf("http://%s/mobyshark", discovery))
-		if err != nil {
-			return nil, fmt.Errorf("cannot update container meta data: %s", err.Error())
-		}
-		defer func() { _ = resp.Body.Close() }()
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return nil, fmt.Errorf("cannot update container meta data: %s", err.Error())
-		}
-		var targets api.GwTargetList
-		if err := json.Unmarshal(body, &targets); err != nil {
-			return nil, fmt.Errorf("cannot update container/target meta data: %s", err.Error())
-		}
-		for _, t := range targets.Targets {
-			if t.Name == args.Name && t.Prefix == args.Prefix {
-				// We've found the desired container, so we can now update its
-				// meta data.
-				name := t.Name
-				if len(t.Prefix) > 0 {
-					name = fmt.Sprintf("%s:%s", t.Prefix, name)
-				}
-				conn.log.Debug("updating target information", slog.String("type", t.Type), slog.String("name", name))
-				orignifs := args.NetworkInterfaces
-				args.Target = t
-				// If there have been a network interface list before the update
-				// and there is no nif= URL query parameter specified, then
-				// restore the original list of network interfaces to capture
-				// from. Otherwise, go with the new list, which might be getting
-				// overwritten below in case there is an explicit nif= query
-				// parameter.
-				if _, ok := params["nif"]; !ok && len(orignifs) > 0 {
-					args.NetworkInterfaces = orignifs
-				}
-				break
-			}
+		_, nifsRequested := params["nif"]
+		if err := refreshTarget(args, conn, discovery, nifsRequested); err != nil {
+			return nil, err
 		}
 	}
 
@@ -154,10 +64,8 @@ func parseCaptureParams(req *http.Request, conn *WSConn, discovery string) (
 	// the list; otherwise we'll fall back to "any", which has the drawback of
 	// using a "cooked" packet stream coming from a single virtual nif instead
 	// of differentiating the real nifs.
-	if nifs, ok := params["nif"]; ok {
-		if nifs[0] != "any" {
-			args.NetworkInterfaces = strings.Split(nifs[0], "/")
-		}
+	if nifs, ok := params["nif"]; ok && nifs[0] != "any" {
+		args.NetworkInterfaces = strings.Split(nifs[0], "/")
 	}
 	if len(args.NetworkInterfaces) == 0 || args.NetworkInterfaces[0] == "" {
 		// Last resort fallback if we don't know the exact list of network
@@ -166,15 +74,124 @@ func parseCaptureParams(req *http.Request, conn *WSConn, discovery string) (
 		args.NetworkInterfaces = []string{"any"}
 	}
 
-	// Get an optional filter expression...
 	if f, ok := params["filter"]; ok {
 		args.CaptureFilter = f[0]
 	}
+	_, args.KeepChaste = params["chaste"]
+	return args, nil
+}
 
-	// And finally for avoiding getting too promiscuous (mode).
-	if _, ok := params["chaste"]; ok {
-		args.KeepChaste = true
+// captureQuery returns the URL query parameters of the request, overridden by
+// any Clustershark-specific HTTP headers.
+//
+// "Würgs" (works) around a bug in the Kubernetes remote API pod proxy verb: this
+// bug drops the URL query parameters from a websocket connect. So to get our job
+// done, we resort to use application-specific (service-specific) HTTP headers,
+// which we then here map back onto their original URL query parameters. In
+// consequence, the service-specific HTTP headers always take precedence.
+//
+// Nota bene: the Go http package insists of canonical header keys, see:
+// https://godoc.org/net/http#CanonicalHeaderKey. This means that the first
+// letter as well as any letters immediately following a hyphen will be upper
+// case.
+func captureQuery(req *http.Request) url.Values {
+	params := req.URL.Query()
+	for header, param := range map[string]string{
+		"Clustershark-Container": "container",
+		"Clustershark-Nif":       "nif",
+		"Clustershark-Filter":    "filter",
+		"Clustershark-Chaste":    "chaste",
+	} {
+		if values, ok := req.Header[header]; ok {
+			params[param] = values
+		}
 	}
+	return params
+}
 
-	return
+// targetFromParams returns the capture target described by either the
+// "container" or the "netns" query parameter, which are mutually exclusive.
+func targetFromParams(params url.Values) (*api.Target, error) {
+	cp, cok := params["container"]
+	netnsp, netnsok := params["netns"]
+	switch {
+	case cok && netnsok:
+		return nil, fmt.Errorf("container and netns query parameters are mutually exclusive")
+	case cok:
+		target := new(api.Target)
+		if err := json.Unmarshal([]byte(cp[0]), target); err != nil {
+			return nil, fmt.Errorf("invalid container/target description: %s", err.Error())
+		}
+		return target, nil
+	case netnsok:
+		netns, err := strconv.ParseInt(netnsp[0], 10, strconv.IntSize)
+		if err != nil || netns <= 0 {
+			return nil, fmt.Errorf("invalid netns \"%s\"", netnsp[0])
+		}
+		return &api.Target{NetNS: int(netns)}, nil
+	}
+	return nil, fmt.Errorf("either container or netns query parameter required")
+}
+
+// isCurrent returns false if the target's network namespace identifier might
+// have turned stale, because the target's (usually "root") process is gone or
+// has a different start time. Without PID and start time, the target is taken
+// as current.
+func isCurrent(target *api.Target) bool {
+	if target.Pid <= 0 || target.StartTime <= 0 {
+		return true
+	}
+	proc := model.NewProcess(model.PIDType(target.Pid), false)
+	return proc != nil && proc.Starttime == uint64(target.StartTime)
+}
+
+// refreshTarget updates the target details with the up-to-date information
+// from the discovery service at the specified "host:port" address, if the
+// discovery service knows the target by its name and prefix. Unless nif=
+// network interfaces have been requested, any original network interfaces of
+// the target are kept.
+func refreshTarget(args *Args, conn *WSConn, discovery string, nifsRequested bool) error {
+	conn.log.Debug("updating container meta data from local discovery service", slog.String("discovery", discovery))
+	targets, err := discoverTargets(discovery)
+	if err != nil {
+		return err
+	}
+	idx := slices.IndexFunc(targets, func(t *api.Target) bool {
+		return t.Name == args.Name && t.Prefix == args.Prefix
+	})
+	if idx < 0 {
+		return nil
+	}
+	target := targets[idx]
+	name := target.Name
+	if target.Prefix != "" {
+		name = target.Prefix + ":" + name
+	}
+	conn.log.Debug("updating target information", slog.String("type", target.Type), slog.String("name", name))
+	orignifs := args.NetworkInterfaces
+	args.Target = target
+	if !nifsRequested && len(orignifs) > 0 {
+		args.NetworkInterfaces = orignifs
+	}
+	return nil
+}
+
+// discoverTargets returns the capture targets known to the discovery service
+// at the specified "host:port" address.
+func discoverTargets(discovery string) (api.Targets, error) {
+	httpc := &http.Client{Timeout: DiscoveryDeadline}
+	resp, err := httpc.Get(fmt.Sprintf("http://%s/mobyshark", discovery))
+	if err != nil {
+		return nil, fmt.Errorf("cannot update container meta data: %s", err.Error())
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("cannot update container meta data: %s", err.Error())
+	}
+	var targets api.GwTargetList
+	if err := json.Unmarshal(body, &targets); err != nil {
+		return nil, fmt.Errorf("cannot update container/target meta data: %s", err.Error())
+	}
+	return targets.Targets, nil
 }
