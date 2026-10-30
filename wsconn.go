@@ -13,6 +13,7 @@ package packetflix
 import (
 	"log/slog"
 	"os"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -162,6 +163,12 @@ func (c *WSConn) Watch() {
 // terminated.
 func (c *WSConn) InitiateGracefulClose(code int, reason string) {
 	if c.state == WSConnOpen {
+		// Close frame payloads are limited to 125 octets, including the 2 octet
+		// code, and must be valid UTF-8.
+		if len(reason) > 123 {
+			reason = reason[:123]
+		}
+		reason = strings.ToValidUTF8(reason, "")
 		c.log.Debug("beginning graceful websocket connection close",
 			slog.Int("code", code), slog.String("reason", reason))
 		_ = c.SetWriteDeadline(time.Now().Add(ClosingDeadline))

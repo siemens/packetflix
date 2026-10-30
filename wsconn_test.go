@@ -130,16 +130,23 @@ var _ = Describe("websocket connection", func() {
 		Eventually(done).Should(BeClosed())
 	})
 
-	// pending: close reasons aren't truncated to the 123 bytes allowed.
-	PIt("passes overly long close reasons truncated to the client", func() {
+	It("passes overly long close reasons truncated to the client", func() {
 		client, done := newWSPair(func(conn *WSConn) {
 			conn.GracefullyClose(websocket.CloseNormalClosure, strings.Repeat("x", 200))
 		})
 		_, _, err := client.ReadMessage()
-		Expect(err).To(SatisfyAll(
-			BeAssignableToTypeOf(&websocket.CloseError{}),
-			HaveField("Code", websocket.CloseNormalClosure),
-			HaveField("Text", HavePrefix("xxx"))))
+		Expect(err).To(MatchError(
+			&websocket.CloseError{Code: websocket.CloseNormalClosure, Text: strings.Repeat("x", 123)}))
+		Eventually(done).Should(BeClosed())
+	})
+
+	It("doesn't truncate close reasons in the middle of a character", func() {
+		client, done := newWSPair(func(conn *WSConn) {
+			conn.GracefullyClose(websocket.CloseNormalClosure, strings.Repeat("x", 122)+"ää")
+		})
+		_, _, err := client.ReadMessage()
+		Expect(err).To(MatchError(
+			&websocket.CloseError{Code: websocket.CloseNormalClosure, Text: strings.Repeat("x", 122)}))
 		Eventually(done).Should(BeClosed())
 	})
 
