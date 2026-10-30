@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
-package main
+package packetflix
 
 import (
 	"net/http"
@@ -20,7 +20,7 @@ var _ = Describe("capture handler", func() {
 
 	It("refuses plain HTTP requests", func() {
 		rec := httptest.NewRecorder()
-		captureHandler(rec, httptest.NewRequest(http.MethodGet, "/capture", nil))
+		NewCaptureHandler("").ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/capture", nil))
 		Expect(rec.Code).To(Equal(http.StatusBadRequest))
 	})
 
@@ -29,7 +29,7 @@ var _ = Describe("capture handler", func() {
 		var wsurl string
 
 		BeforeEach(func() {
-			srv := httptest.NewServer(http.HandlerFunc(captureHandler))
+			srv := httptest.NewServer(NewCaptureHandler(""))
 			DeferCleanup(srv.Close)
 			wsurl = "ws" + strings.TrimPrefix(srv.URL, "http")
 		})

@@ -2,11 +2,10 @@
 //
 // SPDX-License-Identifier: MIT
 
-package main
+package packetflix
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 
@@ -16,11 +15,12 @@ import (
 
 var _ = Describe("discovery service proxy", func() {
 
+	var discovery string
 	var proxied chan *http.Request
 
 	BeforeEach(func() {
 		proxied = make(chan *http.Request, 1)
-		fakeDiscovery(func(w http.ResponseWriter, req *http.Request) {
+		discovery = fakeDiscovery(func(w http.ResponseWriter, req *http.Request) {
 			proxied <- req.Clone(context.Background())
 			w.WriteHeader(http.StatusNoContent)
 		})
@@ -29,7 +29,7 @@ var _ = Describe("discovery service proxy", func() {
 	proxy := func(req *http.Request) *http.Request {
 		GinkgoHelper()
 		rec := httptest.NewRecorder()
-		gwHandler.ServeHTTP(rec, req)
+		NewDiscoveryProxy(discovery).ServeHTTP(rec, req)
 		Expect(rec.Code).To(Equal(http.StatusNoContent))
 		var outreq *http.Request
 		Expect(proxied).To(Receive(&outreq))
@@ -40,7 +40,7 @@ var _ = Describe("discovery service proxy", func() {
 		outreq := proxy(httptest.NewRequest(http.MethodGet, "/foo/bar?baz=42", nil))
 		Expect(outreq.URL.Path).To(Equal("/foo/bar"))
 		Expect(outreq.URL.RawQuery).To(Equal("baz=42"))
-		Expect(outreq.Host).To(Equal(fmt.Sprintf("%s:%d", DiscoveryService, DiscoveryPort)))
+		Expect(outreq.Host).To(Equal(discovery))
 	})
 
 	It("maps the legacy discovery API path", func() {

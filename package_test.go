@@ -2,14 +2,13 @@
 //
 // SPDX-License-Identifier: MIT
 
-package main
+package packetflix
 
 import (
 	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -54,7 +53,7 @@ func newWSPair(serve func(conn *WSConn)) (*websocket.Conn, <-chan struct{}) {
 		defer close(done)
 		defer GinkgoRecover()
 		conn := NewWSConn()
-		conn.Conn = Successful(wsupgrader.Upgrade(w, req, nil))
+		conn.Conn = Successful((&websocket.Upgrader{}).Upgrade(w, req, nil))
 		defer func() { _ = conn.Close() }()
 		serve(conn)
 	}))
@@ -64,19 +63,15 @@ func newWSPair(serve func(conn *WSConn)) (*websocket.Conn, <-chan struct{}) {
 	return client, done
 }
 
-// fakeDiscovery points the discovery service settings to a test server with
-// the passed handler, restoring the original settings at cleanup.
-func fakeDiscovery(handler http.HandlerFunc) {
+// fakeDiscovery runs a discovery service test server with the passed handler
+// until the end of the current spec, returning its "host:port" address.
+func fakeDiscovery(handler http.HandlerFunc) string {
 	GinkgoHelper()
 	srv := httptest.NewServer(handler)
 	DeferCleanup(srv.Close)
 	// The discovery clients use the default transport and its idle connections.
 	DeferCleanup(AssignableTo[*http.Transport](http.DefaultTransport).CloseIdleConnections)
-	srvurl := Successful(url.Parse(srv.URL))
-	oldservice, oldport := DiscoveryService, DiscoveryPort
-	DeferCleanup(func() { DiscoveryService, DiscoveryPort = oldservice, oldport })
-	DiscoveryService = srvurl.Hostname()
-	DiscoveryPort = uint16(Successful(strconv.ParseUint(srvurl.Port(), 10, 16)))
+	return srv.Listener.Addr().String()
 }
 
 // startTime returns the start time of the specified process in clock ticks

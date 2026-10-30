@@ -2,9 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
-//go:generate go run ./internal/gen/version
-
-package main
+package packetflix
 
 import (
 	"time"
@@ -17,6 +15,10 @@ const (
 	// DefaultDiscoveryServicePort specifies the port number of the Ghostwire
 	// service.
 	DefaultDiscoveryServicePort = 5000
+
+	// DefaultDiscoveryService specifies the (host) name or address of the
+	// Ghostwire service.
+	DefaultDiscoveryService = "127.0.0.1"
 
 	// CaptureEnableHeader tells the Ghostwire service to serve its SPA user
 	// interface with capture button enabled.
@@ -38,27 +40,4 @@ const (
 	// StdErrCapturePrefix defines the prefix used by the capture program when
 	// emitting error messages.
 	StdErrCapturePrefix = "dumpcap: "
-)
-
-// Global settings, controllable through CLI arguments.
-var (
-	// Debug ("--debug") enables logging debug messages.
-	Debug = false
-	// Port ("--port" or just "-p") specifies the TCP port of our Packetflix
-	// capture service.
-	Port uint16 = DefaultPacketFlixServicePort
-	// DiscoveryPort ("--gw-port") specifies the TCP port where to contact the
-	// Ghostwire discovery service locally within the same pod or host.
-	DiscoveryPort uint16 = DefaultDiscoveryServicePort
-	// DiscoveryService ("--discovery-service") specifies the (host) name of the
-	// discovery service, if not reachable locally via 127.0.0.1.
-	DiscoveryService string = "127.0.0.1"
-	// ProxyDiscoveryService ("--proxy-discovery") switches on the "/discovery"
-	// proxy route to the discovery service.
-	ProxyDiscoveryService = false
-	// LogRequests enables logging HTTP/WS requests to the frontend.
-	LogRequests = false
-	// LogRequestHeaders enables logging HTTP/WS request headers to the frontend.
-	// Includes LogRequests.
-	LogRequestHeaders = false
 )

@@ -9,7 +9,7 @@
 [![PkgGoDev](https://pkg.go.dev/badge/github.com/siemens/packetflix)](https://pkg.go.dev/github.com/siemens/packetflix)
 [![GitHub](https://img.shields.io/github/license/siemens/packetflix)](https://img.shields.io/github/license/siemens/packetflix)
 ![build and test](https://github.com/siemens/packetflix/workflows/build%20and%20test/badge.svg?branch=main)
-[![Go Report Card](https://goreportcard.com/badge/github.com/siemens/packetflix)](https://goreportcard.com/report/github.com/siemens/packetflix)
+![Coverage](https://img.shields.io/badge/Coverage-72.7%25-yellow)
 
 > **Finally! Container "binge watching" live _packet_ streams for
 > Wireshark(nado) nerds!**

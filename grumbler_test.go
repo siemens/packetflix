@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
-package main
+package packetflix
 
 import (
 	. "github.com/onsi/ginkgo/v2"

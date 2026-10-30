@@ -7,15 +7,18 @@ require google.golang.org/grpc v1.83.2 // indirect
 require (
 	github.com/dustinkirkland/golang-petname v0.0.0-20261016130456-fdd95a3d0543
 	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674
-	github.com/integrii/flaggy v1.8.0
 	github.com/onsi/ginkgo/v2 v2.33.1
 	github.com/onsi/gomega v1.44.0
 	github.com/siemens/csharg/v2 v2.0.3
+	github.com/spf13/cobra v1.10.2
 	github.com/thediveo/caps/v2 v2.0.1
+	github.com/thediveo/clippy v0.2.3
 	github.com/thediveo/fdooze v0.3.4
 	github.com/thediveo/go-mntinfo v1.0.5
+	github.com/thediveo/go-plugger/v3 v3.2.2
 	github.com/thediveo/lxkns v0.48.0
 	github.com/thediveo/nonstd v0.22.0
+	github.com/thediveo/safe v0.9.1
 	github.com/thediveo/spacetest v0.15.1
 	github.com/thediveo/success v1.4.0
 	github.com/thediveo/testily v0.11.0
@@ -49,7 +52,9 @@ require (
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/pprof v0.0.0-20260402051712-545e8a4df936 // indirect
 	github.com/google/uuid v1.6.0 // indirect
+	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/klauspost/compress v1.20.0 // indirect
+	github.com/lmittmann/tint v1.2.0 // indirect
 	github.com/moby/locker v1.0.1 // indirect
 	github.com/moby/sys/mountinfo v0.7.2 // indirect
 	github.com/moby/sys/signal v0.7.1 // indirect
@@ -60,9 +65,9 @@ require (
 	github.com/opencontainers/runtime-spec v1.3.0 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/sirupsen/logrus v1.10.2 // indirect
+	github.com/spf13/pflag v1.0.10 // indirect
 	github.com/thediveo/cpus v0.11.1 // indirect
 	github.com/thediveo/faf v0.2.3 // indirect
-	github.com/thediveo/go-plugger/v3 v3.2.2 // indirect
 	github.com/thediveo/ioctl v0.9.5 // indirect
 	github.com/thediveo/procfsroot v1.1.0 // indirect
 	github.com/thediveo/whalewatcher/v2 v2.1.0 // indirect

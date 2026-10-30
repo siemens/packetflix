@@ -4,7 +4,7 @@
 
 // Turns Linux kernel network namespace identifiers into filesystem references.
 
-package main
+package packetflix
 
 import (
 	"fmt"

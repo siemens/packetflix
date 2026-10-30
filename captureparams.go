@@ -7,7 +7,7 @@
 // structure with the necessary details to join the correct Linux kernel network
 // namespace and the list of network interfaces to capture from.
 
-package main
+package packetflix
 
 import (
 	"bufio"
@@ -33,8 +33,10 @@ type Args struct {
 	KeepChaste bool
 }
 
-// parseCaptureParams parses the capture parameters from the HTTP request.
-func parseCaptureParams(req *http.Request, conn *WSConn) (
+// parseCaptureParams parses the capture parameters from the HTTP request,
+// refreshing stale target information from the discovery service at the
+// specified "host:port" address.
+func parseCaptureParams(req *http.Request, conn *WSConn, discovery string) (
 	args *Args, err error) {
 	params := req.URL.Query()
 	// "Würgs" (works) around a bug in the Kubernetes remote API pod proxy verb:
@@ -125,9 +127,9 @@ func parseCaptureParams(req *http.Request, conn *WSConn) (
 	// If we got unlucky, then we now need to fetch up-to-date information from
 	// the discovery service: we need a correct network namespace identifier.
 	if args.NetNS == 0 {
-		conn.log.Debug("updating container meta data from local discovery service", slog.Int("port", int(DiscoveryPort)))
+		conn.log.Debug("updating container meta data from local discovery service", slog.String("discovery", discovery))
 		httpc := &http.Client{Timeout: DiscoveryDeadline}
-		resp, err := httpc.Get(fmt.Sprintf("http://%s:%d/mobyshark", DiscoveryService, DiscoveryPort))
+		resp, err := httpc.Get(fmt.Sprintf("http://%s/mobyshark", discovery))
 		if err != nil {
 			return nil, fmt.Errorf("cannot update container meta data: %s", err.Error())
 		}

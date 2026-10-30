@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
-package main
+package packetflix
 
 import (
 	"encoding/json"
@@ -26,9 +26,11 @@ import (
 var _ = Describe("capture parameters", func() {
 
 	var ownnetns int
+	var discovery string
 
 	BeforeEach(func() {
 		ownnetns = int(netns.CurrentIno())
+		discovery = ""
 	})
 
 	parse := func(target string, headers ...string) (*Args, error) {
@@ -36,7 +38,7 @@ var _ = Describe("capture parameters", func() {
 		for idx := 0; idx+1 < len(headers); idx += 2 {
 			req.Header[headers[idx]] = []string{headers[idx+1]}
 		}
-		return parseCaptureParams(req, NewWSConn())
+		return parseCaptureParams(req, NewWSConn(), discovery)
 	}
 
 	containerParam := func(target api.Target) string {
@@ -134,7 +136,7 @@ var _ = Describe("capture parameters", func() {
 					{Name: "foo", Type: "docker", NetNS: ownnetns, NetworkInterfaces: []string{"eth0", "lo"}},
 					{Name: "foo", Prefix: "other", Type: "docker", NetNS: 666},
 				}}))
-				fakeDiscovery(func(w http.ResponseWriter, req *http.Request) {
+				discovery = fakeDiscovery(func(w http.ResponseWriter, req *http.Request) {
 					defer GinkgoRecover()
 					Expect(req.URL.Path).To(Equal("/mobyshark"))
 					_, _ = w.Write(targets)
@@ -184,9 +186,8 @@ var _ = Describe("capture parameters", func() {
 		})
 
 		It("fails when the discovery service cannot be reached", func() {
-			fakeDiscovery(func(http.ResponseWriter, *http.Request) {})
 			l := Successful(net.Listen("tcp", "127.0.0.1:0"))
-			DiscoveryPort = uint16(l.Addr().(*net.TCPAddr).Port)
+			discovery = l.Addr().String()
 			Expect(l.Close()).To(Succeed())
 
 			Expect(parse("/capture?container=" + containerParam(api.Target{Name: "foo"}))).Error().
@@ -194,7 +195,7 @@ var _ = Describe("capture parameters", func() {
 		})
 
 		It("fails on garbled discovery data", func() {
-			fakeDiscovery(func(w http.ResponseWriter, _ *http.Request) {
+			discovery = fakeDiscovery(func(w http.ResponseWriter, _ *http.Request) {
 				_, _ = w.Write([]byte("garbage"))
 			})
 			Expect(parse("/capture?container=" + containerParam(api.Target{Name: "foo"}))).Error().

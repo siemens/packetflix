@@ -9,7 +9,7 @@
 // universe. But they might well fit into Terry Pratchett's "Disc World"
 // universe.
 
-package main
+package packetflix
 
 import (
 	"log/slog"

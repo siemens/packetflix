@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
-package main
+package packetflix
 
 import (
 	"fmt"
@@ -23,13 +23,24 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-var wsupgrader = websocket.Upgrader{}
+// captureHandler handles the /capture API endpoint. This upgrades the
+// connection to a websocket and then checks the request parameters (which might
+// be in the headers in order to work around a bug in the Kubernetes pod proxy
+// verb of the remote API.)
+type captureHandler struct {
+	discovery string // "host:port" address of the discovery service.
+	upgrader  websocket.Upgrader
+}
 
-// Handle the /capture API endpoint. This upgrades the connection to a
-// websocket and then checks the request parameters (which might be in the
-// headers in order to work around a bug in the Kubernetes pod proxy verb of
-// the remote API.)
-func captureHandler(w http.ResponseWriter, req *http.Request) {
+// NewCaptureHandler returns a handler for the /capture API endpoint that
+// refreshes stale capture target information from the discovery service at
+// the specified "host:port" address.
+func NewCaptureHandler(discovery string) http.Handler {
+	return &captureHandler{discovery: discovery}
+}
+
+// ServeHTTP serves a single capture stream over a websocket connection.
+func (h *captureHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	started := time.Now()
 	conn := NewWSConn()
 	conn.log.Debug("handler started", slog.String("path", req.URL.Path))
@@ -42,7 +53,7 @@ func captureHandler(w http.ResponseWriter, req *http.Request) {
 	// Otherwise, bail out as we will handle further only a correct websocket
 	// connection.
 	conn.log.Debug("beginning websocket upgrade")
-	cnx, err := wsupgrader.Upgrade(w, req, nil)
+	cnx, err := h.upgrader.Upgrade(w, req, nil)
 	if err != nil {
 		conn.log.Error("websocket upgrade failed", xslog.Error(err))
 		return
@@ -54,7 +65,7 @@ func captureHandler(w http.ResponseWriter, req *http.Request) {
 	}()
 	conn.log.Debug("websocket upgrade successful")
 
-	args, err := parseCaptureParams(req, conn)
+	args, err := parseCaptureParams(req, conn, h.discovery)
 	if err != nil {
 		conn.log.Error("invalid capture parameters", xslog.Error(err))
 		conn.GracefullyClose(websocket.CloseAbnormalClosure, err.Error())

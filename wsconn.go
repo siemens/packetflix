@@ -8,7 +8,7 @@
 // Additionally, we also associate the capturing process (if any) with this
 // connection, so we can sanely manage it.
 
-package main
+package packetflix
 
 import (
 	"log/slog"

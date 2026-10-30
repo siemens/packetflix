@@ -5,7 +5,7 @@
 // A Piper writes the packet capture data stream fed into it via stdin from
 // the packet capture process to the associated websocket connection.
 
-package main
+package packetflix
 
 import (
 	"github.com/gorilla/websocket"

@@ -5,7 +5,7 @@
 // How to pass capabilities to a child process (such as dumpcap) without having
 // to give the binary file itself the capabilities...
 
-package main
+package packetflix
 
 import (
 	"fmt"
