@@ -97,7 +97,7 @@ make deploy
 ## Packetflix Service Args
 
 - `--port`, `-p`: port to expose the capture service on, defaults to port 6666.
-- `--gw-port`: local port where the GhostWire discovery service can be reached,
+- `--gw-port`: local port where the Ghostwire discovery service can be reached,
   defaults to port 5000.
 - `--proxy-discovery`: enables forwarding HTTP requests to the Ghostwire
   discovery service at `/`, unless they're part of the Packetflix API.
@@ -146,7 +146,7 @@ process (that is, not as UID0).
   - `CAP_SYS_PTRACE` in order to be able to reference namespaces: the
     `nsfs` (namespace) filesystem requires this "god" capability in order to
     access namespace-related `/proc` nodes, such as `/proc/$PID/ns/*`. And
-    GhostWire does not even use any `ptrace(2)` syscalls, it just reads from
+    Ghostwire does not even use any `ptrace(2)` syscalls, it just reads from
     `/proc`. Another clear victory for the capabilities architecture: in order to
     discover namespaces, give the process process tracing and modification powers.
     Please see also [Access /proc/pid/ns/net without running query process as

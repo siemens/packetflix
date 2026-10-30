@@ -14,7 +14,7 @@ const (
 	// DefaultPacketFlixServicePort specifies the default service port number.
 	DefaultPacketFlixServicePort = 5001
 
-	// DefaultDiscoveryServicePort specifies the port number of the GhostWire
+	// DefaultDiscoveryServicePort specifies the port number of the Ghostwire
 	// service.
 	DefaultDiscoveryServicePort = 5000
 
@@ -48,7 +48,7 @@ var (
 	// capture service.
 	Port uint16 = DefaultPacketFlixServicePort
 	// DiscoveryPort ("--gw-port") specifies the TCP port where to contact the
-	// GhostWire discovery service locally within the same pod or host.
+	// Ghostwire discovery service locally within the same pod or host.
 	DiscoveryPort uint16 = DefaultDiscoveryServicePort
 	// DiscoveryService ("--discovery-service") specifies the (host) name of the
 	// discovery service, if not reachable locally via 127.0.0.1.

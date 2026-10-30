@@ -77,7 +77,7 @@ The container reference might be stale in that it still references a valid
 container by `name` and `prefix`, but the `netns` might be invalid. This is
 crosschecked and detected on the basis of `pid` and `starttime`. If the
 `starttime`doesn't match the one of the process `pid`, then the capture service
-needs to contact the discovery service (that's GhostWire) in order to fetch the
+needs to contact the discovery service (that's Ghostwire) in order to fetch the
 most up-to-date network namespace ID.
 
 If the data returned by the discovery service still lists the container by
@@ -91,7 +91,7 @@ boundary Wireshark
 participant ClusterShark <<extcap plugin>>
 activate ClusterShark
 entity Packetflix <<service>>
-entity GhostWire <<service>>
+entity Ghostwire <<service>>
 participant nsenter <<executable>>
 participant dumpcap <<executable>>
 
@@ -100,12 +100,12 @@ Wireshark -> ClusterShark : ""--""capture
 
 ClusterShark -> Packetflix : websocket.connect\n/capture?container=...
 activate Packetflix
-  Packetflix -> GhostWire : GET /mobyshark
+  Packetflix -> Ghostwire : GET /mobyshark
 deactivate Packetflix
-  activate GhostWire
+  activate Ghostwire
   |||
-Packetflix <-- GhostWire
-  deactivate GhostWire
+Packetflix <-- Ghostwire
+  deactivate Ghostwire
 activate Packetflix
   create nsenter
   Packetflix -> nsenter : spawn\nnsenter ""--""no-fork

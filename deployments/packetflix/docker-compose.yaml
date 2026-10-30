@@ -1,5 +1,5 @@
 # PacketFlix network packet capture as a (streaming) service. This project
-# requires the separate GhostWire project in order to discover network and
+# requires the separate Ghostwire project in order to discover network and
 # container information.
 version: "2.4"
 services:

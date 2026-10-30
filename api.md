@@ -27,11 +27,11 @@ The version service is exposed via HTTP at the `/version` path.
 
 Only active if the packetflix service has been started using the
 `--proxy-discovery` CLI option. HTTP and Websocket requests to `/discover/...`
-are forwarded (reverse proxied) to an associated GhostWire service with
+are forwarded (reverse proxied) to an associated Ghostwire service with
 rewritten request paths `/...`.
 
 This request forwarding path should only be enabled when running a Packetflix
-service together with a GhostWire service on a single stand-alone container
+service together with a Ghostwire service on a single stand-alone container
 host. In this mode, capture clients (especially
 [csharg](https://github.com/siemens/csharg) and csharg-enabled applications)
 only need to be configured with the host IP address as well as a single service
@@ -54,7 +54,7 @@ will reply very coureously that you would better use the WebSocket protocol.
   behavior (documented below).
 
   The JSON value is structured as follows (typically, it will be the same
-  value as one of the elements returned from GhostWire's `/mobyshark` API
+  value as one of the elements returned from Ghostwire's `/mobyshark` API
   endpoint):
 
   - `netns` (recommended): the network namespace identifier to capture packets
