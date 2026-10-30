@@ -14,7 +14,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	pcapng "github.com/siemens/csharg/v2/pcapng"
-	caps "github.com/syndtr/gocapability/capability"
+	"github.com/thediveo/caps/v2"
 	"github.com/thediveo/lxkns/model"
 	"github.com/thediveo/lxkns/ops"
 	"github.com/thediveo/lxkns/ops/portable"
