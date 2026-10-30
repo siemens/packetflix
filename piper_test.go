@@ -27,12 +27,23 @@ var _ = Describe("piper", func() {
 		Eventually(done).Should(BeClosed())
 	})
 
-	It("marks a broken websocket as failed", func() {
+	It("drops data on a broken websocket, marking it as failed", func() {
 		_, done := newWSPair(func(conn *WSConn) {
 			Expect(conn.UnderlyingConn().Close()).To(Succeed())
 			piper := NewPiper(conn)
-			_, err := piper.Write([]byte("lost"))
-			Expect(err).To(HaveOccurred())
+			Expect(piper.Write([]byte("lost"))).To(Equal(4))
+			Expect(piper.Failed).To(BeTrue())
+		})
+		Eventually(done).Should(BeClosed())
+	})
+
+	It("drops data once the websocket is closing", func() {
+		_, done := newWSPair(func(conn *WSConn) {
+			Expect(conn.WriteMessage(websocket.CloseMessage,
+				websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))).To(Succeed())
+			piper := NewPiper(conn)
+			Expect(piper.Write([]byte("lost"))).To(Equal(4))
+			Expect(piper.Write([]byte("lost, too"))).To(Equal(9))
 			Expect(piper.Failed).To(BeTrue())
 		})
 		Eventually(done).Should(BeClosed())
