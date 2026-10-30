@@ -10,17 +10,16 @@
 package packetflix
 
 import (
-	"bufio"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 
 	"github.com/siemens/csharg/v2/api"
+	"github.com/thediveo/lxkns/model"
 )
 
 // Args represent the capture arguments.
@@ -95,32 +94,13 @@ func parseCaptureParams(req *http.Request, conn *WSConn, discovery string) (
 	// With all (or only some) information gathered into the container meta data
 	// description, now check whether the data is still current or has turned
 	// stale. This can be verified on the basis of the given PID (usually the
-	// "root" process inside a container) and its corresponding start time.
+	// "root" process inside a container) and its corresponding start time. If
+	// the process is gone, we assume the information to be stale in order to
+	// trigger a meta data refresh below.
 	if args.Pid > 0 && args.StartTime > 0 {
-		stf, err := os.Open(fmt.Sprintf("/proc/%d/stat", args.Pid))
-		if err != nil {
-			// We cannot verify the PID and start time, so we assume it to be
-			// stale in order to trigger a meta data refresh below.
+		if proc := model.NewProcess(model.PIDType(args.Pid), false); proc == nil ||
+			proc.Starttime != uint64(args.StartTime) {
 			args.NetNS = 0
-		} else {
-			// Just read the first (and only) line from the process stats and break
-			// it down into its fields...
-			line, _ := bufio.NewReader(stf).ReadString('\n')
-			// /proc/PID/stat has the process name in the second field, and the
-			// name is enclosed in brackets because it may contain spaces, so we
-			// look for the final ')' and only afterwards start splitting the
-			// remaining line contents into fields.
-			stats := strings.Fields(string(line)[strings.Index(string(line), ")")+2:])
-			// starttime is field #22 (counting from #1), so we need to take
-			// into account that Go slice indices start at zero.
-			if starttime, err := strconv.ParseInt(stats[22-3], 10, 64); err == nil {
-				if int64(starttime) != args.StartTime {
-					args.NetNS = 0
-				}
-			} else {
-				// In case of issues verifying the start time, play safe here.
-				args.NetNS = 0
-			}
 		}
 	}
 

@@ -94,8 +94,7 @@ var _ = Describe("capture parameters", func() {
 		Expect(args.KeepChaste).To(BeTrue())
 	})
 
-	// pending: leaks the fd of /proc/PID/stat.
-	PIt("keeps a current target description", func() {
+	It("keeps a current target description", func() {
 		args := Successful(parse("/capture?container=" + containerParam(api.Target{
 			Name:      "foo",
 			NetNS:     ownnetns,
@@ -105,8 +104,7 @@ var _ = Describe("capture parameters", func() {
 		Expect(args.NetNS).To(Equal(ownnetns))
 	})
 
-	// pending: /proc/PID/stat gets split at the first instead of the last ")".
-	PIt("verifies the start times of processes with closing parentheses in their names", func() {
+	It("verifies the start times of processes with closing parentheses in their names", func() {
 		tmpdir := Successful(os.MkdirTemp("", "packetflix-test-"))
 		DeferCleanup(os.RemoveAll, tmpdir)
 		sleeper := filepath.Join(tmpdir, "x) 1 2")
@@ -155,8 +153,7 @@ var _ = Describe("capture parameters", func() {
 				Expect(args.NetworkInterfaces).To(ConsistOf("eth0", "lo"))
 			})
 
-			// pending: leaks the fd of /proc/PID/stat.
-			PIt("refreshes it when the process start time differs", func() {
+			It("refreshes it when the process start time differs", func() {
 				args := Successful(parse("/capture?container=" + containerParam(api.Target{
 					Name:      "foo",
 					NetNS:     42,
