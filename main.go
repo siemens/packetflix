@@ -7,38 +7,38 @@
 // IP stack, et cetera. The captured network packets are then streamed live via
 // a websocket connection to clients connecting to our service.
 //
-// If available, then Packetflix will use GhostWire to update stale container
+// If available, then Packetflix will use Ghostwire to update stale container
 // references with the most up-to-date information as to capture correctly from
-// pods and containers which were reloaded, et cetera. For this, run GhostWire
+// pods and containers which were reloaded, et cetera. For this, run Ghostwire
 // side-by-side with Packetflix.
 package main
 
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
+	"os"
 	"runtime"
 	"strings"
-	"time"
 
 	"github.com/integrii/flaggy"
-	log "github.com/sirupsen/logrus"
 )
 
 // versionPage creates a /version JSON response giving versioning
 // information about this micro service.
 func versionHandler(w http.ResponseWriter, req *http.Request) {
-	v := map[string]interface{}{
+	v := map[string]any{
 		"name":    "packetflix",
 		"version": SemVersion,
 	}
 	j, err := json.Marshal(v)
 	if err != nil {
-		log.Errorf("cannot create version JSON: %s", err.Error())
+		slog.Error("cannot create version JSON", "err", err)
 	}
 	_, err = w.Write(j)
 	if err != nil {
-		log.Errorf("cannot create /version: %s", err.Error())
+		slog.Error("cannot create /version", "err", err)
 	}
 }
 
@@ -57,14 +57,13 @@ func requestLogger(h http.Handler) http.Handler {
 		if i := strings.LastIndex(addr, ":"); i != -1 {
 			addr = addr[:i]
 		}
-		log.Infof("%s - - [%s] %q %d %d %q %q",
-			addr,
-			time.Now().Format("02/Jan/2006:15:04:05 -0700"),
-			fmt.Sprintf("%s %s %s", req.Method, req.URL.Path, req.Proto),
-			-1,
-			-1,
-			req.Referer(),
-			req.UserAgent())
+		slog.Info("request",
+			"remote", addr,
+			"method", req.Method,
+			"path", req.URL.Path,
+			"proto", req.Proto,
+			"referer", req.Referer(),
+			"user-agent", req.UserAgent())
 		// Hand over to the (de)muxer handler...
 		h.ServeHTTP(w, req)
 	})
@@ -81,13 +80,11 @@ func main() {
 	// network namespace.
 	runtime.LockOSThread()
 
-	log.SetFormatter(&log.TextFormatter{
-		ForceColors:   true,
-		FullTimestamp: true,
-	})
+	logLevel := new(slog.LevelVar)
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: logLevel})))
 
 	// Get the show going...
-	log.Infof("Packetflix Capture-as-a-Service version %s", SemVersion)
+	slog.Info("Packetflix Capture-as-a-Service", "version", SemVersion)
 
 	// Set up CLI arg parsing.
 	flaggy.SetName("Packetflix")
@@ -103,15 +100,15 @@ func main() {
 	flaggy.String(&DiscoveryService, "", "discovery-service",
 		"name/address of discovery service")
 	flaggy.UInt16(&DiscoveryPort, "", "gw-port",
-		"port of local GhostWire discovery service")
+		"port of local Ghostwire discovery service")
 	flaggy.Bool(&ProxyDiscoveryService, "", "proxy-discovery",
 		fmt.Sprintf("enable/disable proxy discovery service SPA and API (default: %t)", ProxyDiscoveryService))
 
 	flaggy.Parse()
 
 	if Debug {
-		log.SetLevel(log.DebugLevel)
-		log.Debug("debugging messages enabled")
+		logLevel.Set(slog.LevelDebug)
+		slog.Debug("debugging messages enabled")
 	}
 
 	// For unknown reasons the "thing" reponsible for demultiplexing incomming
@@ -123,15 +120,15 @@ func main() {
 	demux.HandleFunc("/capture", captureHandler)
 	demux.HandleFunc("/version", versionHandler)
 	if ProxyDiscoveryService {
-		// Enable reverse proxying to the associated GhostWire discovery service
+		// Enable reverse proxying to the associated Ghostwire discovery service
 		// instance at (fixed) path "/" ... everything not handled otherwise
 		// will thus end up in the Ghostwire service and its SPA.
-		log.Debug("forwarding to discovery service enabled")
+		slog.Debug("forwarding to discovery service enabled")
 		demux.Handle("/", gwHandler)
 	}
-	log.Infof("starting capture service websocket server on port %d...", Port)
-	log.Error(
-		http.ListenAndServe(
-			fmt.Sprintf("[::]:%d", Port),
-			requestLogger(demux)))
+	slog.Info("starting capture service websocket server", "port", Port)
+	err := http.ListenAndServe(
+		fmt.Sprintf("[::]:%d", Port),
+		requestLogger(demux))
+	slog.Error("capture service terminated", "err", err)
 }

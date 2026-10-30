@@ -31,8 +31,8 @@ func NewGrumbler(conn *WSConn) *Grumbler {
 	}
 }
 
-// Collects all the grumbling of a process into a gigantic buffer. And log it
-// for debugging purposes. The grumbling later can be used to construct a
+// Write collects all the grumbling of a process into a gigantic buffer. And
+// log it for debugging purposes. The grumbling later can be used to construct a
 // reason text for the websocket close control message to give capture clients
 // an indication as to www -- what went wrong. Please note that we expect
 // grumbling to eventually be terminated by \n so we only log at these points.
@@ -42,7 +42,7 @@ func (g Grumbler) Write(grumble []byte) (n int, err error) {
 	// to it. The reason is that nsenter grumbles as multiple pieces until it
 	// finally is finished. Oh, and wipe out those pesky \r that cause trouble
 	// further down the road since we're removing \n anyway.
-	grrr := strings.Replace(string(grumble), "\r", "", -1)
+	grrr := strings.ReplaceAll(string(grumble), "\r", "")
 	for {
 		if i := strings.IndexRune(grrr, '\n'); i >= 0 {
 			// Looks like we've got now what could be a complete line...
@@ -54,7 +54,7 @@ func (g Grumbler) Write(grumble []byte) (n int, err error) {
 				if !strings.HasPrefix(*g.r, StdErrCapturePrefix) {
 					// Just mumbling, so throw it away and try to make
 					// some sense of the rest...
-					g.Debugf("capture process: %s", *g.r)
+					g.log.Debug("capture process", "stderr", *g.r)
 					*g.r = ""
 					grrr = grrr[i+1:]
 				} else {
@@ -63,13 +63,13 @@ func (g Grumbler) Write(grumble []byte) (n int, err error) {
 					// mumbling instead of an error. This way, the log will
 					// contain all of the error message.
 					g.frozenr = true
-					g.Errorf("capture process: %s", *g.r)
+					g.log.Error("capture process", "stderr", *g.r)
 					grrr = grrr[i+1:]
 				}
 			} else {
 				// We've already a complete and thus frozen reason line, so we
 				// now just log all other lines (mumble, mumble)...
-				g.Debugf("capture process mumble: %s", grrr[:i])
+				g.log.Debug("capture process mumble", "stderr", grrr[:i])
 				grrr = grrr[i+1:]
 			}
 		} else {

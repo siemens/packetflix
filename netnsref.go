@@ -9,11 +9,11 @@ package main
 import (
 	"fmt"
 	"io/ioutil"
+	"log/slog"
 	"os"
 	"syscall"
 	"unicode"
 
-	log "github.com/sirupsen/logrus"
 	"github.com/thediveo/go-mntinfo"
 )
 
@@ -44,7 +44,7 @@ func netnsPath(netns uint64) string {
 			}
 		}
 	} else {
-		log.Errorf("/proc failed: %s", err.Error())
+		slog.Error("cannot read /proc", "err", err)
 	}
 	// Then search bindmount'ed network namespaces for a match...
 	for _, mount := range mntinfo.MountsOfType(-1, "nsfs") {

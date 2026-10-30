@@ -11,7 +11,7 @@
 package main
 
 import (
-	"fmt"
+	"log/slog"
 	"os"
 	"sync"
 	"syscall"
@@ -19,7 +19,6 @@ import (
 
 	petname "github.com/dustinkirkland/golang-petname"
 	"github.com/gorilla/websocket"
-	log "github.com/sirupsen/logrus"
 )
 
 // Things are tricky, since we have to juggle with an external process that can
@@ -85,24 +84,15 @@ type WSConn struct {
 	ID              string      // unique ID string for this connection.
 	*os.Process                 // associated process with its lifetime bounded by this connection.
 	terminateOnce   sync.Once
+	log             *slog.Logger // logger tagged with this connection's ID.
 }
 
 // NewWSConn returns a new websocket connection wrapper that features an
 // additional ID, so multiple (concurrent) websocket connections can still be
 // differentiated in the logs.
 func NewWSConn() *WSConn {
-	wsconnid := petname.Generate(2, "-")
-	return &WSConn{ID: fmt.Sprint(wsconnid)}
-}
-
-// Debugf logs a formatted debug message, prefixed by the connection ID.
-func (c *WSConn) Debugf(format string, args ...interface{}) {
-	log.Debugf("("+c.ID+") "+format, args...)
-}
-
-// Errorf logs a formatted error message, prefixed by the connection ID.
-func (c *WSConn) Errorf(format string, args ...interface{}) {
-	log.Errorf("("+c.ID+") "+format, args...)
+	id := petname.Generate(2, "-")
+	return &WSConn{ID: id, log: slog.With("conn", id)}
 }
 
 // Terminate sends the associated capture process the signal to terminate
@@ -111,8 +101,10 @@ func (c *WSConn) Errorf(format string, args ...interface{}) {
 func (c *WSConn) Terminate() {
 	if c.Process != nil {
 		c.terminateOnce.Do(func() {
-			c.Debugf("signalling capture process to terminate...")
-			c.Process.Signal(syscall.SIGTERM)
+			c.log.Debug("signalling capture process to terminate")
+			if err := c.Signal(syscall.SIGTERM); err != nil {
+				c.log.Debug("cannot signal capture process", "err", err)
+			}
 		})
 	}
 }
@@ -121,7 +113,7 @@ func (c *WSConn) Terminate() {
 // Additionally, it also handles acknowledging a graceful shutdown or receiving
 // a client's graceful acknowledge.
 func (c *WSConn) Watch() {
-	c.Debugf("watching websocket connection...")
+	c.log.Debug("watching websocket connection")
 	for {
 		_, _, err := c.ReadMessage()
 		if err != nil {
@@ -129,31 +121,30 @@ func (c *WSConn) Watch() {
 				// It is not an error, but instead a close control message by
 				// the client. We now need to see if we need to acknowledge it
 				// or if it was the final close message in the handshake...
-				if c.state == WSConnOpen {
+				switch c.state {
+				case WSConnOpen:
 					// Let's try to gracefully acknowledge the close, and then
 					// we're done.
 					c.state = WSConnClosed
-					c.Debugf(
-						"capture client closing with code %d, reason \"%s\"",
-						cerr.Code, cerr.Text)
-					c.Debugf("acknowledging close (ciao!)")
+					c.log.Debug("capture client closing",
+						"code", cerr.Code, "reason", cerr.Text)
+					c.log.Debug("acknowledging close (ciao!)")
 					_ = c.SetWriteDeadline(time.Now().Add(ClosingDeadline))
 					_ = c.WriteMessage(
 						websocket.CloseMessage,
 						websocket.FormatCloseMessage(cerr.Code, "ciao"))
-				} else if c.state == WSConnClosing {
+				case WSConnClosing:
 					// It is already the final ack, so we're done now too.
 					c.state = WSConnClosed
-					c.Debugf(
-						"capture client acknowledged close with code %d, reason \"%s\"",
-						cerr.Code, cerr.Text)
+					c.log.Debug("capture client acknowledged close",
+						"code", cerr.Code, "reason", cerr.Text)
 				}
 			}
 			// Any error means that the websocket is broken, and any close means
 			// that we're done by now. So release resources.
 			c.Terminate()
-			c.Debugf("websocket closed")
-			c.Close()
+			c.log.Debug("websocket closed")
+			_ = c.Close()
 			return
 		}
 		// Whatever the websocket client is sending us ... we'll ignore it. And
@@ -170,10 +161,8 @@ func (c *WSConn) Watch() {
 // terminated.
 func (c *WSConn) InitiateGracefulClose(code int, reason string) {
 	if c.state == WSConnOpen {
-		c.Debugf(
-			"beginning graceful websocket connection close "+
-				"with code %d, reason \"%s\"...",
-			code, reason)
+		c.log.Debug("beginning graceful websocket connection close",
+			"code", code, "reason", reason)
 		_ = c.SetWriteDeadline(time.Now().Add(ClosingDeadline))
 		c.state = WSConnClosing
 		err := c.WriteMessage(
@@ -181,9 +170,9 @@ func (c *WSConn) InitiateGracefulClose(code int, reason string) {
 			websocket.FormatCloseMessage(code, reason))
 		if err != nil {
 			c.state = WSConnClosed
-			c.Errorf("sending graceful close control message failed: %s", err.Error())
+			c.log.Error("sending graceful close control message failed", "err", err)
 			c.Terminate()
-			c.Close()
+			_ = c.Close()
 		}
 	}
 }

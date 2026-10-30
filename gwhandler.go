@@ -11,11 +11,10 @@ package main
 
 import (
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httputil"
 	"path"
-
-	log "github.com/sirupsen/logrus"
 )
 
 // Handle the /discover route: it gets forwarded into the associated discovery
@@ -31,7 +30,7 @@ var gwHandler = &httputil.ReverseProxy{
 	// handler to be called with any path prefix having already been removed and
 	// the URL now is relative!
 	Director: func(req *http.Request) {
-		log.Debugf("handling %q...", req.URL.Path)
+		slog.Debug("handling request", "path", req.URL.Path)
 
 		// Handle the old plugin discovery API path, too.
 		if req.URL.Path == "/discover/mobyshark" {
@@ -52,6 +51,6 @@ var gwHandler = &httputil.ReverseProxy{
 		}
 		// Signal the Ghostwire SPA to enable capture functionality in its UI.
 		req.Header.Set(CaptureEnableHeader, "Affirmative, Dave")
-		log.Debugf("forwarding/reverse proxying to %q", req.URL.String())
+		slog.Debug("forwarding/reverse proxying", "url", req.URL.String())
 	},
 }
