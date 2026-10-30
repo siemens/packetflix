@@ -16,6 +16,7 @@ require (
 	github.com/thediveo/go-mntinfo v1.0.5
 	github.com/thediveo/lxkns v0.48.0
 	github.com/thediveo/nonstd v0.22.0
+	github.com/thediveo/spacetest v0.15.1
 	github.com/thediveo/success v1.4.0
 	github.com/thediveo/testily v0.11.0
 	golang.org/x/sys v0.49.0
