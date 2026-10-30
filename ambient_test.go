@@ -99,6 +99,7 @@ var _ = Describe("ambient capabilities", func() {
 			}
 
 			securebits := Successful(unix.PrctlRetInt(unix.PR_GET_SECUREBITS, 0, 0, 0, 0))
+			const secbitNoCapAmbientRaise = 1 << 6 // from linux/securebits.h, missing in x/sys/unix
 			Expect(unix.Prctl(unix.PR_SET_SECUREBITS,
 				uintptr(securebits|secbitNoCapAmbientRaise), 0, 0, 0)).To(Succeed())
 

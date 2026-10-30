@@ -12,6 +12,7 @@ require (
 	github.com/onsi/gomega v1.44.0
 	github.com/siemens/csharg/v2 v2.0.3
 	github.com/thediveo/caps/v2 v2.0.1
+	github.com/thediveo/fdooze v0.3.4
 	github.com/thediveo/go-mntinfo v1.0.5
 	github.com/thediveo/lxkns v0.48.0
 	github.com/thediveo/nonstd v0.22.0
