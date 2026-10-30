@@ -48,14 +48,14 @@ var _ = Describe("capture handler", func() {
 			Expect(err).To(HaveOccurred())
 		})
 
-		// pending: sends the reserved close code 1006, which clients reject.
-		PIt("tells the client the reason", func() {
+		It("tells the client the reason", func() {
 			client, _ := Successful2R(websocket.DefaultDialer.Dial(wsurl+"/capture", nil))
 			DeferCleanup(func() { _ = client.Close() })
 			_, _, err := client.ReadMessage()
-			Expect(err).To(SatisfyAll(
-				BeAssignableToTypeOf(&websocket.CloseError{}),
-				HaveField("Text", "either container or netns query parameter required")))
+			Expect(err).To(MatchError(&websocket.CloseError{
+				Code: websocket.ClosePolicyViolation,
+				Text: "either container or netns query parameter required",
+			}))
 		})
 
 	})

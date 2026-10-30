@@ -68,7 +68,7 @@ func (h *captureHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	args, err := parseCaptureParams(req, conn, h.discovery)
 	if err != nil {
 		conn.log.Error("invalid capture parameters", xslog.Error(err))
-		conn.GracefullyClose(websocket.CloseAbnormalClosure, err.Error())
+		conn.GracefullyClose(websocket.ClosePolicyViolation, err.Error())
 		return
 	}
 	target := args.Target
@@ -77,7 +77,7 @@ func (h *captureHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	if len(netnsref) == 0 {
 		reason := "could not locate network namespace for container"
 		conn.log.Error(reason, slog.Int("netns", target.NetNS))
-		conn.GracefullyClose(websocket.CloseAbnormalClosure, reason)
+		conn.GracefullyClose(websocket.ClosePolicyViolation, reason)
 		return
 	}
 	conn.log.Debug("capturing from network interfaces",
@@ -103,7 +103,7 @@ func (h *captureHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	lockednetns, unlocker, err := portref.Open()
 	if err != nil {
 		conn.log.Error("cannot lock netns", slog.Int("netns", target.NetNS), xslog.Error(err))
-		conn.GracefullyClose(websocket.CloseAbnormalClosure, "cannot lock target network stack")
+		conn.GracefullyClose(websocket.CloseInternalServerErr, "cannot lock target network stack")
 		return
 	}
 	defer unlocker()
@@ -165,14 +165,14 @@ func (h *captureHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		lockednetns)
 	if err != nil {
 		conn.log.Error("cannot switch to target network stack", xslog.Error(err))
-		conn.InitiateGracefulClose(websocket.CloseAbnormalClosure, "cannot switch to target network stack")
+		conn.InitiateGracefulClose(websocket.CloseInternalServerErr, "cannot switch to target network stack")
 		conn.Watch() // finishes the graceful close.
 		return
 	}
 	err, _ = res.(error)
 	if err != nil {
 		conn.log.Error("cannot start capture process", xslog.Error(err))
-		conn.InitiateGracefulClose(websocket.CloseAbnormalClosure, "cannot start capture process")
+		conn.InitiateGracefulClose(websocket.CloseInternalServerErr, "cannot start capture process")
 		conn.Watch() // finishes the graceful close.
 		return
 	}
@@ -205,7 +205,7 @@ func (h *captureHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			if len(r) == 0 {
 				conn.InitiateGracefulClose(websocket.CloseNormalClosure, "ciao")
 			} else {
-				conn.InitiateGracefulClose(websocket.CloseAbnormalClosure, r)
+				conn.InitiateGracefulClose(websocket.CloseInternalServerErr, r)
 			}
 		} else {
 			conn.log.Debug("capture process terminated successfully")
