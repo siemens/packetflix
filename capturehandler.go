@@ -6,6 +6,7 @@ package main
 
 import (
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os/exec"
 	"sync"
@@ -18,6 +19,7 @@ import (
 	"github.com/thediveo/lxkns/ops"
 	"github.com/thediveo/lxkns/ops/portable"
 	"github.com/thediveo/lxkns/species"
+	"github.com/thediveo/nonstd/xslog"
 	"golang.org/x/sys/unix"
 )
 
@@ -30,10 +32,10 @@ var wsupgrader = websocket.Upgrader{}
 func captureHandler(w http.ResponseWriter, req *http.Request) {
 	started := time.Now()
 	conn := NewWSConn()
-	conn.log.Debug("handler started", "path", req.URL.Path)
+	conn.log.Debug("handler started", slog.String("path", req.URL.Path))
 	defer func() {
-		conn.log.Debug("handler finished", "path", req.URL.Path,
-			"duration", time.Since(started).Truncate(time.Second))
+		conn.log.Debug("handler finished", slog.String("path", req.URL.Path),
+			slog.Duration("duration", time.Since(started).Truncate(time.Second)))
 	}()
 
 	// Upgrade the HTTP connection into a websocket connection, if possible.
@@ -42,7 +44,7 @@ func captureHandler(w http.ResponseWriter, req *http.Request) {
 	conn.log.Debug("beginning websocket upgrade")
 	cnx, err := wsupgrader.Upgrade(w, req, nil)
 	if err != nil {
-		conn.log.Error("websocket upgrade failed", "err", err)
+		conn.log.Error("websocket upgrade failed", xslog.Error(err))
 		return
 	}
 	conn.Conn = cnx
@@ -54,25 +56,25 @@ func captureHandler(w http.ResponseWriter, req *http.Request) {
 
 	args, err := parseCaptureParams(req, conn)
 	if err != nil {
-		conn.log.Error("invalid capture parameters", "err", err)
+		conn.log.Error("invalid capture parameters", xslog.Error(err))
 		conn.GracefullyClose(websocket.CloseAbnormalClosure, err.Error())
 		return
 	}
 	target := args.Target
-	conn.log.Debug("capture target", "type", target.Type, "target", *target)
+	conn.log.Debug("capture target", slog.String("type", target.Type), slog.Any("target", *target))
 	netnsref := netnsPath(uint64(target.NetNS))
 	if len(netnsref) == 0 {
 		reason := "could not locate network namespace for container"
-		conn.log.Error(reason, "netns", target.NetNS)
+		conn.log.Error(reason, slog.Int("netns", target.NetNS))
 		conn.GracefullyClose(websocket.CloseAbnormalClosure, reason)
 		return
 	}
 	conn.log.Debug("capturing from network interfaces",
-		"type", target.Type, "nifs", target.NetworkInterfaces)
+		slog.String("type", target.Type), slog.Any("nifs", target.NetworkInterfaces))
 	if len(args.CaptureFilter) > 0 {
-		conn.log.Debug("filtering capture", "filter", args.CaptureFilter)
+		conn.log.Debug("filtering capture", slog.String("filter", args.CaptureFilter))
 	}
-	conn.log.Debug("referencing netns", "netns", target.NetNS, "path", netnsref)
+	conn.log.Debug("referencing netns", slog.Int("netns", target.NetNS), slog.String("path", netnsref))
 
 	// With the target information we can now create a "portable namespace
 	// reference": it allows us to open, validate and "lock" a namespace based
@@ -89,7 +91,7 @@ func captureHandler(w http.ResponseWriter, req *http.Request) {
 	}
 	lockednetns, unlocker, err := portref.Open()
 	if err != nil {
-		conn.log.Error("cannot lock netns", "netns", target.NetNS, "err", err)
+		conn.log.Error("cannot lock netns", slog.Int("netns", target.NetNS), xslog.Error(err))
 		conn.GracefullyClose(websocket.CloseAbnormalClosure, "cannot lock target network stack")
 		return
 	}
@@ -115,7 +117,7 @@ func captureHandler(w http.ResponseWriter, req *http.Request) {
 		captargs = append(captargs, "-i", nif)
 	}
 	if len(args.CaptureFilter) > 0 {
-		conn.log.Debug("capture filter", "filter", args.CaptureFilter)
+		conn.log.Debug("capture filter", slog.String("filter", args.CaptureFilter))
 		captargs = append(captargs, "-f", args.CaptureFilter)
 	}
 
@@ -139,26 +141,26 @@ func captureHandler(w http.ResponseWriter, req *http.Request) {
 			// thanks to lxkns ;)
 			netnsid, _ := ops.NamespacePath(fmt.Sprintf("/proc/%d/ns/net", unix.Gettid())).ID()
 			conn.log.Debug("running capture program inside locked netns",
-				"program", CaptureProgram, "netns", netnsid.Ino)
+				slog.String("program", CaptureProgram), slog.Uint64("netns", netnsid.Ino))
 			// In order to run the unprivileged dumpcap binary with the
 			// necessary capabilities, we need to transfer them via the ambient
 			// capabilities. If you don't know what ambient capabilities are,
 			// then you really don't want to know anyway.
 			if err := SetAmbient(caps.CAP_NET_ADMIN, caps.CAP_NET_RAW); err != nil {
-				conn.log.Error("cannot set ambient capabilities", "err", err)
+				conn.log.Error("cannot set ambient capabilities", xslog.Error(err))
 			}
 			return cmd.Start()
 		},
 		lockednetns)
 	if err != nil {
-		conn.log.Error("cannot switch to target network stack", "err", err)
+		conn.log.Error("cannot switch to target network stack", xslog.Error(err))
 		conn.InitiateGracefulClose(websocket.CloseAbnormalClosure, "cannot switch to target network stack")
 		conn.Watch() // finishes the graceful close.
 		return
 	}
 	err, _ = res.(error)
 	if err != nil {
-		conn.log.Error("cannot start capture process", "err", err)
+		conn.log.Error("cannot start capture process", xslog.Error(err))
 		conn.InitiateGracefulClose(websocket.CloseAbnormalClosure, "cannot start capture process")
 		conn.Watch() // finishes the graceful close.
 		return
@@ -184,7 +186,7 @@ func captureHandler(w http.ResponseWriter, req *http.Request) {
 		defer wg.Done()
 		err := cmd.Wait()
 		if err != nil {
-			conn.log.Error("capture process failure", "err", err)
+			conn.log.Error("capture process failure", xslog.Error(err))
 			r := grrr.Reason()
 			if len(r) == 0 && !piper.Failed {
 				r = "capture process failed"

@@ -12,6 +12,7 @@
 package main
 
 import (
+	"log/slog"
 	"strings"
 )
 
@@ -54,7 +55,7 @@ func (g Grumbler) Write(grumble []byte) (n int, err error) {
 				if !strings.HasPrefix(*g.r, StdErrCapturePrefix) {
 					// Just mumbling, so throw it away and try to make
 					// some sense of the rest...
-					g.log.Debug("capture process", "stderr", *g.r)
+					g.log.Debug("capture process", slog.String("stderr", *g.r))
 					*g.r = ""
 					grrr = grrr[i+1:]
 				} else {
@@ -63,13 +64,13 @@ func (g Grumbler) Write(grumble []byte) (n int, err error) {
 					// mumbling instead of an error. This way, the log will
 					// contain all of the error message.
 					g.frozenr = true
-					g.log.Error("capture process", "stderr", *g.r)
+					g.log.Error("capture process", slog.String("stderr", *g.r))
 					grrr = grrr[i+1:]
 				}
 			} else {
 				// We've already a complete and thus frozen reason line, so we
 				// now just log all other lines (mumble, mumble)...
-				g.log.Debug("capture process mumble", "stderr", grrr[:i])
+				g.log.Debug("capture process mumble", slog.String("stderr", grrr[:i]))
 				grrr = grrr[i+1:]
 			}
 		} else {

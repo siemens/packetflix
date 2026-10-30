@@ -19,6 +19,7 @@ import (
 
 	petname "github.com/dustinkirkland/golang-petname"
 	"github.com/gorilla/websocket"
+	"github.com/thediveo/nonstd/xslog"
 )
 
 // Things are tricky, since we have to juggle with an external process that can
@@ -92,7 +93,7 @@ type WSConn struct {
 // differentiated in the logs.
 func NewWSConn() *WSConn {
 	id := petname.Generate(2, "-")
-	return &WSConn{ID: id, log: slog.With("conn", id)}
+	return &WSConn{ID: id, log: slog.With(slog.String("conn", id))}
 }
 
 // Terminate sends the associated capture process the signal to terminate
@@ -103,7 +104,7 @@ func (c *WSConn) Terminate() {
 		c.terminateOnce.Do(func() {
 			c.log.Debug("signalling capture process to terminate")
 			if err := c.Signal(syscall.SIGTERM); err != nil {
-				c.log.Debug("cannot signal capture process", "err", err)
+				c.log.Debug("cannot signal capture process", xslog.Error(err))
 			}
 		})
 	}
@@ -127,7 +128,7 @@ func (c *WSConn) Watch() {
 					// we're done.
 					c.state = WSConnClosed
 					c.log.Debug("capture client closing",
-						"code", cerr.Code, "reason", cerr.Text)
+						slog.Int("code", cerr.Code), slog.String("reason", cerr.Text))
 					c.log.Debug("acknowledging close (ciao!)")
 					_ = c.SetWriteDeadline(time.Now().Add(ClosingDeadline))
 					_ = c.WriteMessage(
@@ -137,7 +138,7 @@ func (c *WSConn) Watch() {
 					// It is already the final ack, so we're done now too.
 					c.state = WSConnClosed
 					c.log.Debug("capture client acknowledged close",
-						"code", cerr.Code, "reason", cerr.Text)
+						slog.Int("code", cerr.Code), slog.String("reason", cerr.Text))
 				}
 			}
 			// Any error means that the websocket is broken, and any close means
@@ -162,7 +163,7 @@ func (c *WSConn) Watch() {
 func (c *WSConn) InitiateGracefulClose(code int, reason string) {
 	if c.state == WSConnOpen {
 		c.log.Debug("beginning graceful websocket connection close",
-			"code", code, "reason", reason)
+			slog.Int("code", code), slog.String("reason", reason))
 		_ = c.SetWriteDeadline(time.Now().Add(ClosingDeadline))
 		c.state = WSConnClosing
 		err := c.WriteMessage(
@@ -170,7 +171,7 @@ func (c *WSConn) InitiateGracefulClose(code int, reason string) {
 			websocket.FormatCloseMessage(code, reason))
 		if err != nil {
 			c.state = WSConnClosed
-			c.log.Error("sending graceful close control message failed", "err", err)
+			c.log.Error("sending graceful close control message failed", xslog.Error(err))
 			c.Terminate()
 			_ = c.Close()
 		}

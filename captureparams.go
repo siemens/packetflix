@@ -14,6 +14,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"strconv"
@@ -124,7 +125,7 @@ func parseCaptureParams(req *http.Request, conn *WSConn) (
 	// If we got unlucky, then we now need to fetch up-to-date information from
 	// the discovery service: we need a correct network namespace identifier.
 	if args.NetNS == 0 {
-		conn.log.Debug("updating container meta data from local discovery service", "port", DiscoveryPort)
+		conn.log.Debug("updating container meta data from local discovery service", slog.Int("port", int(DiscoveryPort)))
 		httpc := &http.Client{Timeout: DiscoveryDeadline}
 		resp, err := httpc.Get(fmt.Sprintf("http://%s:%d/mobyshark", DiscoveryService, DiscoveryPort))
 		if err != nil {
@@ -147,7 +148,7 @@ func parseCaptureParams(req *http.Request, conn *WSConn) (
 				if len(t.Prefix) > 0 {
 					name = fmt.Sprintf("%s:%s", t.Prefix, name)
 				}
-				conn.log.Debug("updating target information", "type", t.Type, "name", name)
+				conn.log.Debug("updating target information", slog.String("type", t.Type), slog.String("name", name))
 				orignifs := args.NetworkInterfaces
 				args.Target = t
 				// If there have been a network interface list before the update

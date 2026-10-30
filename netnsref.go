@@ -14,6 +14,7 @@ import (
 	"unicode"
 
 	"github.com/thediveo/go-mntinfo"
+	"github.com/thediveo/nonstd/xslog"
 )
 
 // netnsPath returns a filesystem reference to the network namespace in question.
@@ -43,7 +44,7 @@ func netnsPath(netns uint64) string {
 			}
 		}
 	} else {
-		slog.Error("cannot read /proc", "err", err)
+		slog.Error("cannot read /proc", xslog.Error(err))
 	}
 	// Then search bindmount'ed network namespaces for a match...
 	for _, mount := range mntinfo.MountsOfType(-1, "nsfs") {

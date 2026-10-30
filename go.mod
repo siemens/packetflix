@@ -12,6 +12,7 @@ require (
 	github.com/syndtr/gocapability v0.0.0-20200815063812-42c35b437635
 	github.com/thediveo/go-mntinfo v1.0.5
 	github.com/thediveo/lxkns v0.48.0
+	github.com/thediveo/nonstd v0.22.0
 	golang.org/x/sys v0.49.0
 )
 
@@ -54,7 +55,6 @@ require (
 	github.com/thediveo/faf v0.2.3 // indirect
 	github.com/thediveo/go-plugger/v3 v3.2.2 // indirect
 	github.com/thediveo/ioctl v0.9.5 // indirect
-	github.com/thediveo/nonstd v0.22.0 // indirect
 	github.com/thediveo/procfsroot v1.1.0 // indirect
 	github.com/thediveo/testily v0.11.0 // indirect
 	github.com/thediveo/whalewatcher/v2 v2.1.0 // indirect

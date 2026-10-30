@@ -9,6 +9,7 @@ package main
 
 import (
 	"github.com/gorilla/websocket"
+	"github.com/thediveo/nonstd/xslog"
 )
 
 // Piper pipes all packet capture output straight into a websocket connection.
@@ -32,7 +33,7 @@ func NewPiper(conn *WSConn) *Piper {
 func (p *Piper) Write(data []byte) (n int, err error) {
 	err = p.WriteMessage(websocket.BinaryMessage, data)
 	if err != nil {
-		p.log.Debug("websocket broken", "err", err)
+		p.log.Debug("websocket broken", xslog.Error(err))
 		p.Failed = true
 	}
 	n = len(data)

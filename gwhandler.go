@@ -49,7 +49,7 @@ var gwHandler = &httputil.ReverseProxy{
 	// the URL now is relative!
 	Rewrite: func(pr *httputil.ProxyRequest) {
 		req := pr.Out
-		slog.Debug("handling request", "path", req.URL.Path)
+		slog.Debug("handling request", slog.String("path", req.URL.Path))
 
 		// Handle the old plugin discovery API path, too.
 		if req.URL.Path == "/discover/mobyshark" {
@@ -65,6 +65,6 @@ var gwHandler = &httputil.ReverseProxy{
 		pr.SetXForwarded()
 		// Signal the Ghostwire SPA to enable capture functionality in its UI.
 		req.Header.Set(CaptureEnableHeader, "Affirmative, Dave")
-		slog.Debug("forwarding/reverse proxying", "url", req.URL.String())
+		slog.Debug("forwarding/reverse proxying", slog.String("url", req.URL.String()))
 	},
 }

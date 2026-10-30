@@ -2,15 +2,6 @@
 //
 // SPDX-License-Identifier: MIT
 
-// Packetflix is a capture-as-a-service implementation: it captures network
-// packets from the network interfaces of a container, pod, process-less virtual
-// IP stack, et cetera. The captured network packets are then streamed live via
-// a websocket connection to clients connecting to our service.
-//
-// If available, then Packetflix will use Ghostwire to update stale container
-// references with the most up-to-date information as to capture correctly from
-// pods and containers which were reloaded, et cetera. For this, run Ghostwire
-// side-by-side with Packetflix.
 package main
 
 import (
@@ -23,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/integrii/flaggy"
+	"github.com/thediveo/nonstd/xslog"
 )
 
 // versionPage creates a /version JSON response giving versioning
@@ -34,11 +26,11 @@ func versionHandler(w http.ResponseWriter, req *http.Request) {
 	}
 	j, err := json.Marshal(v)
 	if err != nil {
-		slog.Error("cannot create version JSON", "err", err)
+		slog.Error("cannot create version JSON", xslog.Error(err))
 	}
 	_, err = w.Write(j)
 	if err != nil {
-		slog.Error("cannot create /version", "err", err)
+		slog.Error("cannot create /version", xslog.Error(err))
 	}
 }
 
@@ -58,12 +50,12 @@ func requestLogger(h http.Handler) http.Handler {
 			addr = addr[:i]
 		}
 		slog.Info("request",
-			"remote", addr,
-			"method", req.Method,
-			"path", req.URL.Path,
-			"proto", req.Proto,
-			"referer", req.Referer(),
-			"user-agent", req.UserAgent())
+			slog.String("remote", addr),
+			slog.String("method", req.Method),
+			slog.String("path", req.URL.Path),
+			slog.String("proto", req.Proto),
+			slog.String("referer", req.Referer()),
+			slog.String("user-agent", req.UserAgent()))
 		// Hand over to the (de)muxer handler...
 		h.ServeHTTP(w, req)
 	})
@@ -84,7 +76,7 @@ func main() {
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: logLevel})))
 
 	// Get the show going...
-	slog.Info("Packetflix Capture-as-a-Service", "version", SemVersion)
+	slog.Info("Packetflix Capture-as-a-Service", slog.String("version", SemVersion))
 
 	// Set up CLI arg parsing.
 	flaggy.SetName("Packetflix")
@@ -126,9 +118,9 @@ func main() {
 		slog.Debug("forwarding to discovery service enabled")
 		demux.Handle("/", gwHandler)
 	}
-	slog.Info("starting capture service websocket server", "port", Port)
+	slog.Info("starting capture service websocket server", slog.Int("port", int(Port)))
 	err := http.ListenAndServe(
 		fmt.Sprintf("[::]:%d", Port),
 		requestLogger(demux))
-	slog.Error("capture service terminated", "err", err)
+	slog.Error("capture service terminated", xslog.Error(err))
 }
