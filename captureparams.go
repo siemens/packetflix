@@ -6,13 +6,14 @@
 // establish a live websock capture stream. It then returns a container data
 // structure with the necessary details to join the correct Linux kernel network
 // namespace and the list of network interfaces to capture from.
+
 package main
 
 import (
 	"bufio"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"os"
 	"strconv"
@@ -80,7 +81,7 @@ func parseCaptureParams(req *http.Request, conn *WSConn) (
 		if netns, err := strconv.ParseInt(netnsp[0], 10, strconv.IntSize); err == nil && netns > 0 {
 			args = new(Args)
 			args.Target = new(api.Target)
-			args.Target.NetNS = int(netns)
+			args.NetNS = int(netns)
 		} else {
 			return nil, fmt.Errorf("invalid netns \"%s\"", netnsp[0])
 		}
@@ -92,12 +93,12 @@ func parseCaptureParams(req *http.Request, conn *WSConn) (
 	// description, now check whether the data is still current or has turned
 	// stale. This can be verified on the basis of the given PID (usually the
 	// "root" process inside a container) and its corresponding start time.
-	if args.Target.Pid > 0 && args.Target.StartTime > 0 {
-		stf, err := os.Open(fmt.Sprintf("/proc/%d/stat", args.Target.Pid))
+	if args.Pid > 0 && args.StartTime > 0 {
+		stf, err := os.Open(fmt.Sprintf("/proc/%d/stat", args.Pid))
 		if err != nil {
 			// We cannot verify the PID and start time, so we assume it to be
 			// stale in order to trigger a meta data refresh below.
-			args.Target.NetNS = 0
+			args.NetNS = 0
 		} else {
 			// Just read the first (and only) line from the process stats and break
 			// it down into its fields...
@@ -110,27 +111,27 @@ func parseCaptureParams(req *http.Request, conn *WSConn) (
 			// starttime is field #22 (counting from #1), so we need to take
 			// into account that Go slice indices start at zero.
 			if starttime, err := strconv.ParseInt(stats[22-3], 10, 64); err == nil {
-				if int64(starttime) != args.Target.StartTime {
-					args.Target.NetNS = 0
+				if int64(starttime) != args.StartTime {
+					args.NetNS = 0
 				}
 			} else {
 				// In case of issues verifying the start time, play safe here.
-				args.Target.NetNS = 0
+				args.NetNS = 0
 			}
 		}
 	}
 
 	// If we got unlucky, then we now need to fetch up-to-date information from
 	// the discovery service: we need a correct network namespace identifier.
-	if args.Target.NetNS == 0 {
+	if args.NetNS == 0 {
 		conn.log.Debug("updating container meta data from local discovery service", "port", DiscoveryPort)
 		httpc := &http.Client{Timeout: DiscoveryDeadline}
 		resp, err := httpc.Get(fmt.Sprintf("http://%s:%d/mobyshark", DiscoveryService, DiscoveryPort))
 		if err != nil {
 			return nil, fmt.Errorf("cannot update container meta data: %s", err.Error())
 		}
-		defer resp.Body.Close()
-		body, err := ioutil.ReadAll(resp.Body)
+		defer func() { _ = resp.Body.Close() }()
+		body, err := io.ReadAll(resp.Body)
 		if err != nil {
 			return nil, fmt.Errorf("cannot update container meta data: %s", err.Error())
 		}
@@ -139,7 +140,7 @@ func parseCaptureParams(req *http.Request, conn *WSConn) (
 			return nil, fmt.Errorf("cannot update container/target meta data: %s", err.Error())
 		}
 		for _, t := range targets.Targets {
-			if t.Name == args.Target.Name && t.Prefix == args.Target.Prefix {
+			if t.Name == args.Name && t.Prefix == args.Prefix {
 				// We've found the desired container, so we can now update its
 				// meta data.
 				name := t.Name
@@ -147,7 +148,7 @@ func parseCaptureParams(req *http.Request, conn *WSConn) (
 					name = fmt.Sprintf("%s:%s", t.Prefix, name)
 				}
 				conn.log.Debug("updating target information", "type", t.Type, "name", name)
-				orignifs := args.Target.NetworkInterfaces
+				orignifs := args.NetworkInterfaces
 				args.Target = t
 				// If there have been a network interface list before the update
 				// and there is no nif= URL query parameter specified, then
@@ -156,7 +157,7 @@ func parseCaptureParams(req *http.Request, conn *WSConn) (
 				// overwritten below in case there is an explicit nif= query
 				// parameter.
 				if _, ok := params["nif"]; !ok && len(orignifs) > 0 {
-					args.Target.NetworkInterfaces = orignifs
+					args.NetworkInterfaces = orignifs
 				}
 				break
 			}
@@ -172,14 +173,14 @@ func parseCaptureParams(req *http.Request, conn *WSConn) (
 	// of differentiating the real nifs.
 	if nifs, ok := params["nif"]; ok {
 		if nifs[0] != "any" {
-			args.Target.NetworkInterfaces = strings.Split(nifs[0], "/")
+			args.NetworkInterfaces = strings.Split(nifs[0], "/")
 		}
 	}
-	if len(args.Target.NetworkInterfaces) == 0 || args.Target.NetworkInterfaces[0] == "" {
+	if len(args.NetworkInterfaces) == 0 || args.NetworkInterfaces[0] == "" {
 		// Last resort fallback if we don't know the exact list of network
 		// interfaces. This will remove the capture of the detail information
 		// from which specific network interface a packet comes from.
-		args.Target.NetworkInterfaces = []string{"any"}
+		args.NetworkInterfaces = []string{"any"}
 	}
 
 	// Get an optional filter expression...

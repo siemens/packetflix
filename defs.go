@@ -50,8 +50,8 @@ var (
 	// DiscoveryPort ("--gw-port") specifies the TCP port where to contact the
 	// GhostWire discovery service locally within the same pod or host.
 	DiscoveryPort uint16 = DefaultDiscoveryServicePort
-	// (Host) Name of the discovery service, if not reachable locally via
-	// 127.0.0.1.
+	// DiscoveryService ("--discovery-service") specifies the (host) name of the
+	// discovery service, if not reachable locally via 127.0.0.1.
 	DiscoveryService string = "127.0.0.1"
 	// ProxyDiscoveryService ("--proxy-discovery") switches on the "/discovery"
 	// proxy route to the discovery service.

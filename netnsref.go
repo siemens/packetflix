@@ -8,7 +8,6 @@ package main
 
 import (
 	"fmt"
-	"io/ioutil"
 	"log/slog"
 	"os"
 	"syscall"
@@ -21,7 +20,7 @@ import (
 // It searches both the processes as well as bindmount'ed network namespaces...
 func netnsPath(netns uint64) string {
 	// First search in processes for a suitable netns filesystem reference...
-	procpids, err := ioutil.ReadDir("/proc")
+	procpids, err := os.ReadDir("/proc")
 	if err == nil {
 		for _, procpid := range procpids {
 			// Skip all non-process entries and aliases in /proc.

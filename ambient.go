@@ -9,6 +9,7 @@ package main
 
 import (
 	"fmt"
+	"slices"
 
 	caps "github.com/syndtr/gocapability/capability"
 	"golang.org/x/sys/unix"
@@ -30,13 +31,8 @@ func SetAmbient(ambcaps ...caps.Cap) error {
 	// set, but check against the currently effective capabilities.
 	ambs := []caps.Cap{}
 	for cap := caps.Cap(tid); cap <= caps.CAP_LAST_CAP; cap++ {
-		if mycaps.Get(caps.EFFECTIVE, cap) {
-			for _, c := range ambcaps {
-				if cap == c {
-					ambs = append(ambs, cap)
-					break
-				}
-			}
+		if mycaps.Get(caps.EFFECTIVE, cap) && slices.Contains(ambcaps, cap) {
+			ambs = append(ambs, cap)
 		}
 	}
 	// Now actually set the ambient capabilities for the process.

@@ -2,15 +2,6 @@
 //
 // SPDX-License-Identifier: MIT
 
-// Packetflix is a capture-as-a-service implementation: it captures network
-// packets from the network interfaces of a container, pod, process-less virtual
-// IP stack, et cetera. The captured network packets are then streamed live via
-// a websocket connection to clients connecting to our service.
-//
-// If available, then Packetflix will use GhostWire to update stale container
-// references with the most up-to-date information as to capture correctly from
-// pods and containers which were reloaded, et cetera. For this, run GhostWire
-// side-by-side with Packetflix.
 package main
 
 import (
@@ -20,15 +11,14 @@ import (
 	"sync"
 	"time"
 
-	pcapng "github.com/siemens/csharg/v2/pcapng"
-	"golang.org/x/sys/unix"
-
 	"github.com/gorilla/websocket"
+	pcapng "github.com/siemens/csharg/v2/pcapng"
 	caps "github.com/syndtr/gocapability/capability"
 	"github.com/thediveo/lxkns/model"
 	"github.com/thediveo/lxkns/ops"
 	"github.com/thediveo/lxkns/ops/portable"
 	"github.com/thediveo/lxkns/species"
+	"golang.org/x/sys/unix"
 )
 
 var wsupgrader = websocket.Upgrader{}
@@ -58,7 +48,7 @@ func captureHandler(w http.ResponseWriter, req *http.Request) {
 	conn.Conn = cnx
 	// Because I seem to not trust my coding abilities... ;)
 	defer func() {
-		conn.Close()
+		_ = conn.Close()
 	}()
 	conn.log.Debug("websocket upgrade successful")
 
@@ -142,7 +132,7 @@ func captureHandler(w http.ResponseWriter, req *http.Request) {
 	// it to terminate, for good or bad.
 	conn.log.Debug("starting capture command")
 	res, err := ops.Execute(
-		func() interface{} {
+		func() any {
 			// This will be executed in a separate OS-locked Go routine,
 			// switched into the target's network namespace. dumpcap thus will
 			// run attached to the target's network stack. All animal magic
@@ -154,7 +144,9 @@ func captureHandler(w http.ResponseWriter, req *http.Request) {
 			// necessary capabilities, we need to transfer them via the ambient
 			// capabilities. If you don't know what ambient capabilities are,
 			// then you really don't want to know anyway.
-			SetAmbient(caps.CAP_NET_ADMIN, caps.CAP_NET_RAW)
+			if err := SetAmbient(caps.CAP_NET_ADMIN, caps.CAP_NET_RAW); err != nil {
+				conn.log.Error("cannot set ambient capabilities", "err", err)
+			}
 			return cmd.Start()
 		},
 		lockednetns)
