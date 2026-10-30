@@ -153,6 +153,10 @@ process (that is, not as UID0).
     root?](https://unix.stackexchange.com/questions/443382/access-proc-pid-ns-net-without-running-query-process-as-root)
     for details and references to the `nsfs` filesystem involved.
 
+  - `CAP_DAC_READ_SEARCH` in order to discover network namespaces that are
+    bind-mounted into directories not accessible to a non-root process, such
+    as Docker's `/run/docker/netns/`.
+
 - `dumpcap`:
 
   - `CAP_NET_ADMIN` is needed in order to configure network interfaces for promiscuous
@@ -169,6 +173,7 @@ services:
       - SYS_ADMIN # change namespaces
       - SYS_CHROOT # change mount namespaces
       - SYS_PTRACE # access nsfs namespace information
+      - DAC_READ_SEARCH # discover bind-mounted network namespaces
       - CAP_NET_ADMIN # to configure network interface capturing
       - CAP_NET_RAW # for, erm, well, capturing?
 ```

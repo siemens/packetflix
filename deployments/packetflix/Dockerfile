@@ -55,7 +55,7 @@ RUN --mount=target=. \
         -ldflags="${LDFLAGS} -X main.version=${VERSION}" \
         -o /packetflix ./cmd/packetflix && \
     xx-verify --static /packetflix
-RUN setcap "cap_sys_admin,cap_sys_chroot,cap_sys_ptrace,cap_net_admin,cap_net_raw+ep" /packetflix
+RUN setcap "cap_sys_admin,cap_sys_chroot,cap_sys_ptrace,cap_dac_read_search,cap_net_admin,cap_net_raw+ep" /packetflix
 
 # -- 2nd stage ---------------------------------------------------------------
 #
