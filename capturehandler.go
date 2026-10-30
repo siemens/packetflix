@@ -114,7 +114,7 @@ func (h *captureHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		// write packet capture stream to stdout.
 		"-w", "-",
 		// use pcapng format anyway.
-		"-n",
+		"-F", "pcapng",
 		// keep (almost) quiet: no packet capture count, but still some initial messages :(
 		"-q",
 	}
