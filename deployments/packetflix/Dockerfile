@@ -4,8 +4,9 @@
 # package manager. Additionally, we try to make good use of layer caching.
 
 # Debian packages come from snapshot.debian.org as of this point in time, so
-# rebuilds get the same package versions; bump it to pick up (security) updates.
-ARG DEBIAN_SNAPSHOT=20261101T000000Z
+# rebuilds get the same package versions; use "make bump-debian" to pick up
+# (security) updates.
+ARG DEBIAN_SNAPSHOT=20261102T185036Z
 
 # https://github.com/tonistiigi/xx/blob/master/README.md
 FROM --platform=${BUILDPLATFORM} tonistiigi/xx:1.10.0@sha256:40fe21f44bb8cddf1eb1226db190d0a984118f62ee02a91b77d99448d28264a6 AS cc-helpers
