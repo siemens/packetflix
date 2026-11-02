@@ -196,8 +196,8 @@ capabilities. The required (effective) capabilities can be given to a non-root
 process by using file capabilities on `/packetflix`. Packetflix then passes
 `CAP_NET_ADMIN` and `CAP_NET_RAW` on to `dumpcap` as ambient capabilities, so
 `/usr/bin/dumpcap` doesn't need any file capabilities. In fact, the image
-removes the file capabilities that Alpine's `dumpcap` comes with, as the kernel
-otherwise ignores ambient capabilities.
+unpacks Debian's `dumpcap` without running its package scripts, so it never
+gets file capabilities, as the kernel otherwise ignores ambient capabilities.
 
 As `/packetflix` carries these file capabilities, the container must be granted
 all of them (see `cap_add` above); otherwise, starting the container fails with
