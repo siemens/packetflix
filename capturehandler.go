@@ -85,6 +85,9 @@ func (h *captureHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	if len(args.CaptureFilter) > 0 {
 		conn.log.Debug("filtering capture", slog.String("filter", args.CaptureFilter))
 	}
+	if args.KeepChaste {
+		conn.log.Debug("avoiding promiscuous mode, if possible, on all network interfaces")
+	}
 	conn.log.Debug("referencing netns", slog.Int("netns", target.NetNS), slog.String("path", netnsref))
 
 	// With the target information we can now create a "portable namespace
@@ -107,34 +110,10 @@ func (h *captureHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	defer unlocker()
-	// With the target network namespace under lock and key, prepare the
-	// nsenter/packet capture commands (and their arguments) we want to start
-	// soon.
-	captargs := []string{
-		// write packet capture stream to stdout.
-		"-w", "-",
-		// use pcapng format anyway.
-		"-F", "pcapng",
-		// keep (almost) quiet: no packet capture count, but still some initial messages :(
-		"-q",
-	}
-	// As we want to apply "avoid promiscuous mode" to all network interfaces, we need
-	// to specify it *before* the list of network interfaces.
-	if args.KeepChaste {
-		conn.log.Debug("avoiding promiscuous mode, if possible, on all network interfaces")
-		captargs = append(captargs, "-p")
-	}
-	for _, nif := range target.NetworkInterfaces {
-		captargs = append(captargs, "-i", nif)
-	}
-	if len(args.CaptureFilter) > 0 {
-		conn.log.Debug("capture filter", slog.String("filter", args.CaptureFilter))
-		captargs = append(captargs, "-f", args.CaptureFilter)
-	}
 
 	// Wire the capture command's stdout to the websocket, and sneak in a pcapng
 	// stream editor to inject capture target meta information.
-	cmd := exec.Command(CaptureProgram, captargs...)
+	cmd := exec.Command(CaptureProgram, dumpcapArgs(args)...)
 	piper := NewPiper(conn)
 	cmd.Stdout = pcapng.NewStreamEditor(piper, target, args.CaptureFilter, args.KeepChaste)
 	grrr := NewGrumbler(conn)
@@ -165,15 +144,13 @@ func (h *captureHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		lockednetns)
 	if err != nil {
 		conn.log.Error("cannot switch to target network stack", xslog.Error(err))
-		conn.InitiateGracefulClose(websocket.CloseInternalServerErr, "cannot switch to target network stack")
-		conn.Watch() // finishes the graceful close.
+		conn.GracefullyClose(websocket.CloseInternalServerErr, "cannot switch to target network stack")
 		return
 	}
 	err, _ = res.(error)
 	if err != nil {
 		conn.log.Error("cannot start capture process", xslog.Error(err))
-		conn.InitiateGracefulClose(websocket.CloseInternalServerErr, "cannot start capture process")
-		conn.Watch() // finishes the graceful close.
+		conn.GracefullyClose(websocket.CloseInternalServerErr, "cannot start capture process")
 		return
 	}
 	// So far, so good. While things can still go south from here on, we passed
@@ -213,4 +190,28 @@ func (h *captureHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	}()
 	// Wait for both the watcher/reader and the process waiter to finish.
 	wg.Wait()
+}
+
+// dumpcapArgs returns the capture program's CLI arguments for the specified
+// capture arguments.
+func dumpcapArgs(args *Args) []string {
+	captargs := []string{
+		// write packet capture stream to stdout.
+		"-w", "-",
+		// use pcapng format anyway.
+		"-F", "pcapng",
+		// keep (almost) quiet: no packet capture count, but still some initial messages :(
+		"-q",
+	}
+	// "Avoid promiscuous mode" applies only to network interfaces following it.
+	if args.KeepChaste {
+		captargs = append(captargs, "-p")
+	}
+	for _, nif := range args.NetworkInterfaces {
+		captargs = append(captargs, "-i", nif)
+	}
+	if args.CaptureFilter != "" {
+		captargs = append(captargs, "-f", args.CaptureFilter)
+	}
+	return captargs
 }

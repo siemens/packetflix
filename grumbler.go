@@ -43,16 +43,17 @@ func (g *Grumbler) Write(grumble []byte) (int, error) {
 	for {
 		line, rest, complete := strings.Cut(grrr, "\n")
 		if !complete {
-			// Not terminated by \n, so keep on collecting (unless already
-			// frozen) and wait for the next round.
-			if !g.frozenr {
-				g.r += line
-			}
-			return len(grumble), nil
+			break
 		}
 		g.grumbleLine(line)
 		grrr = rest
 	}
+	// Not terminated by \n, so keep on collecting (unless already frozen)
+	// and wait for the next round.
+	if !g.frozenr {
+		g.r += grrr
+	}
+	return len(grumble), nil
 }
 
 // grumbleLine handles a complete line of grumbling: the first line starting
