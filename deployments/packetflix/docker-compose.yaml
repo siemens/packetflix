@@ -29,13 +29,6 @@ services:
             # discovery, due to reading from /proc/$PID/ns/* is considered to be
             # ptrace read/ready operations.
             - apparmor:unconfined
-
-            # The default Docker container seccomp profile is adaptive and
-            # throws wide open all gates when showing it your capabilities. The
-            # default seccomp profile thus does not interfere. But we might want
-            # to slightly curb the powers of CRAP_SYS_ADMIN and
-            # CRAP_SYS_PTRACE...
-            - seccomp:seccomp/packetflix.json
         # In order to set only exactly a specific set of capabilities without
         # any additional Docker container default capabilities, we need to drop
         # "all" capabilities. Regardless of the order (there ain't one) of YAML
@@ -49,8 +42,8 @@ services:
             - SYS_CHROOT      # change mount namespaces
             - SYS_PTRACE      # access nsfs namespace information
             - DAC_READ_SEARCH # for discovering and using bind-mounted network namespaces
-            - CAP_NET_ADMIN   # to configure network interface capturing
-            - CAP_NET_RAW     # for, erm, well, capturing?
+            - NET_ADMIN       # to configure network interface capturing
+            - NET_RAW         # for, erm, well, capturing?
         # Essential, as we need the full PID view in order to reference the
         # network namespaces of containers via their processes.
         pid: host

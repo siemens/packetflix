@@ -185,8 +185,8 @@ services:
       - SYS_CHROOT # change mount namespaces
       - SYS_PTRACE # access nsfs namespace information
       - DAC_READ_SEARCH # discover bind-mounted network namespaces
-      - CAP_NET_ADMIN # to configure network interface capturing
-      - CAP_NET_RAW # for, erm, well, capturing?
+      - NET_ADMIN # to configure network interface capturing
+      - NET_RAW # for, erm, well, capturing?
 ```
 
 ### Root(h)less
@@ -195,7 +195,13 @@ Packetflix can be run as a non-root user process, when given the above mentioned
 capabilities. The required (effective) capabilities can be given to a non-root
 process by using file capabilities on `/packetflix`. Packetflix then passes
 `CAP_NET_ADMIN` and `CAP_NET_RAW` on to `dumpcap` as ambient capabilities, so
-`/usr/bin/dumpcap` doesn't need any file capabilities.
+`/usr/bin/dumpcap` doesn't need any file capabilities. In fact, the image
+removes the file capabilities that Alpine's `dumpcap` comes with, as the kernel
+otherwise ignores ambient capabilities.
+
+As `/packetflix` carries these file capabilities, the container must be granted
+all of them (see `cap_add` above); otherwise, starting the container fails with
+"operation not permitted".
 
 ### Packetflix Container and AppArmor
 
