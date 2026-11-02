@@ -180,6 +180,17 @@ var _ = Describe("capture parameters", func() {
 				Expect(args.NetNS).To(Equal(666))
 			})
 
+			It("leaves targets unknown to the discovery service without network namespace", func() {
+				args := Successful(parse("/capture?container=" + containerParam(api.Target{
+					Name:      "bar",
+					NetNS:     42,
+					Pid:       1<<31 - 1,
+					StartTime: 1,
+				})))
+				Expect(args.Name).To(Equal("bar"))
+				Expect(args.NetNS).To(BeZero())
+			})
+
 		})
 
 		It("fails when the discovery service cannot be reached", func() {

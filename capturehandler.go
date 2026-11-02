@@ -29,6 +29,7 @@ import (
 // verb of the remote API.)
 type captureHandler struct {
 	discovery string // "host:port" address of the discovery service.
+	program   string // capture program to run.
 	upgrader  websocket.Upgrader
 }
 
@@ -36,7 +37,7 @@ type captureHandler struct {
 // refreshes stale capture target information from the discovery service at
 // the specified "host:port" address.
 func NewCaptureHandler(discovery string) http.Handler {
-	return &captureHandler{discovery: discovery}
+	return &captureHandler{discovery: discovery, program: CaptureProgram}
 }
 
 // ServeHTTP serves a single capture stream over a websocket connection.
@@ -113,7 +114,7 @@ func (h *captureHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 	// Wire the capture command's stdout to the websocket, and sneak in a pcapng
 	// stream editor to inject capture target meta information.
-	cmd := exec.Command(CaptureProgram, dumpcapArgs(args)...)
+	cmd := exec.Command(h.program, dumpcapArgs(args)...)
 	piper := NewPiper(conn)
 	cmd.Stdout = pcapng.NewStreamEditor(piper, target, args.CaptureFilter, args.KeepChaste)
 	grrr := NewGrumbler(conn)
@@ -131,7 +132,7 @@ func (h *captureHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			// thanks to lxkns ;)
 			netnsid, _ := ops.NamespacePath(fmt.Sprintf("/proc/%d/ns/net", unix.Gettid())).ID()
 			conn.log.Debug("running capture program inside locked netns",
-				slog.String("program", CaptureProgram), slog.Uint64("netns", netnsid.Ino))
+				slog.String("program", h.program), slog.Uint64("netns", netnsid.Ino))
 			// In order to run the unprivileged dumpcap binary with the
 			// necessary capabilities, we need to transfer them via the ambient
 			// capabilities. If you don't know what ambient capabilities are,

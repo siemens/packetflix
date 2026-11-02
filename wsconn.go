@@ -145,10 +145,10 @@ func (c *WSConn) handleClose(cerr *websocket.CloseError) {
 		c.log.Debug("capture client closing",
 			slog.Int("code", cerr.Code), slog.String("reason", cerr.Text))
 		c.log.Debug("acknowledging close (ciao!)")
-		_ = c.SetWriteDeadline(time.Now().Add(ClosingDeadline))
-		_ = c.WriteMessage(
+		_ = c.WriteControl(
 			websocket.CloseMessage,
-			websocket.FormatCloseMessage(cerr.Code, "ciao"))
+			websocket.FormatCloseMessage(cerr.Code, "ciao"),
+			time.Now().Add(ClosingDeadline))
 	case WSConnClosing:
 		c.state = WSConnClosed
 		c.log.Debug("capture client acknowledged close",
@@ -174,11 +174,11 @@ func (c *WSConn) InitiateGracefulClose(code int, reason string) {
 	reason = strings.ToValidUTF8(reason, "")
 	c.log.Debug("beginning graceful websocket connection close",
 		slog.Int("code", code), slog.String("reason", reason))
-	_ = c.SetWriteDeadline(time.Now().Add(ClosingDeadline))
 	c.state = WSConnClosing
-	err := c.WriteMessage(
+	err := c.WriteControl(
 		websocket.CloseMessage,
-		websocket.FormatCloseMessage(code, reason))
+		websocket.FormatCloseMessage(code, reason),
+		time.Now().Add(ClosingDeadline))
 	if err == nil {
 		return
 	}

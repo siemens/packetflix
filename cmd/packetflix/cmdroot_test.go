@@ -13,6 +13,7 @@ import (
 	"net/http/httptest"
 	"strconv"
 
+	"github.com/thediveo/clippy/debug"
 	"github.com/thediveo/safe"
 
 	"github.com/siemens/packetflix"
@@ -63,10 +64,12 @@ var _ = Describe("packetflix command", func() {
 		occupied := Successful(net.Listen("tcp", ":0"))
 		DeferCleanup(occupied.Close)
 		rootCmd := newRootCmd()
+		rootCmd.SetContext(context.Background())
+		debug.SetWriter(rootCmd, GinkgoWriter)
 		rootCmd.SetArgs([]string{"--port", strconv.Itoa(occupied.Addr().(*net.TCPAddr).Port)})
 		rootCmd.SetOut(GinkgoWriter)
 		rootCmd.SetErr(GinkgoWriter)
-		Expect(rootCmd.ExecuteContext(context.Background())).To(
+		Expect(rootCmd.Execute()).To(
 			MatchError(ContainSubstring("cannot start capture service")))
 	})
 

@@ -24,7 +24,7 @@
             "iptablesSwitchAtRuntime": false
         },
         "ghcr.io/thediveo/devcontainer-features/gocover:1": {
-            "root": false, // no tests need root
+            "root": true, // no tests need root
             "num-programs": "1", // do never run package-level tests in parallel
             "race": true, // enable race detector
             "verbose": true,

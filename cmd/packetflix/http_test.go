@@ -5,6 +5,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -23,6 +24,14 @@ var _ = Describe("HTTP frontend", func() {
 		versionHandler(rec, httptest.NewRequest(http.MethodGet, "/version", nil))
 		Expect(rec.Body.String()).To(MatchJSON(
 			fmt.Sprintf(`{"name":"packetflix","version":%q}`, buildVersion())))
+	})
+
+	It("logs failing to send its version", func() {
+		logbuff := gbytes.NewBuffer()
+		slog.SetDefault(slog.New(slog.NewTextHandler(logbuff, nil)))
+
+		versionHandler(failingWriter{httptest.NewRecorder()}, httptest.NewRequest(http.MethodGet, "/version", nil))
+		Expect(logbuff).To(gbytes.Say(`msg="cannot create /version"`))
 	})
 
 	When("demultiplexing", func() {
@@ -64,3 +73,7 @@ var _ = Describe("HTTP frontend", func() {
 	})
 
 })
+
+type failingWriter struct{ http.ResponseWriter }
+
+func (failingWriter) Write([]byte) (int, error) { return 0, errors.New("write failed") }

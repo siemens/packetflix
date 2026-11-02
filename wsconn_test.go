@@ -50,6 +50,14 @@ var _ = Describe("websocket connection", func() {
 			Consistently(stdout).WithTimeout(500 * time.Millisecond).ShouldNot(gbytes.Say("TERM"))
 		})
 
+		It("tolerates an already finished process", func() {
+			cmd := exec.Command("/bin/true")
+			Expect(cmd.Run()).To(Succeed())
+			conn := NewWSConn()
+			conn.Process = cmd.Process
+			Expect(conn.Terminate).NotTo(Panic())
+		})
+
 	})
 
 	It("completes a graceful close initiated by the server", func() {
@@ -123,6 +131,17 @@ var _ = Describe("websocket connection", func() {
 		client, done := newWSPair(func(conn *WSConn) {
 			conn.state = WSConnClosing
 			conn.InitiateGracefulClose(websocket.CloseNormalClosure, "bye")
+		})
+		_, _, err := client.ReadMessage()
+		Expect(err).To(MatchError(
+			&websocket.CloseError{Code: websocket.CloseAbnormalClosure, Text: io.ErrUnexpectedEOF.Error()}))
+		Eventually(done).Should(BeClosed())
+	})
+
+	It("does not run a graceful close when already closing", func() {
+		client, done := newWSPair(func(conn *WSConn) {
+			conn.state = WSConnClosing
+			conn.GracefullyClose(websocket.CloseNormalClosure, "bye")
 		})
 		_, _, err := client.ReadMessage()
 		Expect(err).To(MatchError(
