@@ -73,7 +73,7 @@ func (h *captureHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	target := args.Target
-	conn.log.Debug("capture target", slog.String("type", target.Type), slog.Any("target", *target))
+	conn.log.Debug("capture target", slog.Int("netns", target.NetNS), slog.Int("pid", target.Pid))
 	netnsref := netnsPath(uint64(target.NetNS))
 	if len(netnsref) == 0 {
 		reason := "could not locate network namespace for container"
@@ -84,7 +84,7 @@ func (h *captureHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	conn.log.Debug("capturing from network interfaces",
 		slog.String("type", target.Type), slog.Any("nifs", target.NetworkInterfaces))
 	if len(args.CaptureFilter) > 0 {
-		conn.log.Debug("filtering capture", slog.String("filter", args.CaptureFilter))
+		conn.log.Debug("filtering capture", slog.Int("filter_len", len(args.CaptureFilter)))
 	}
 	if args.KeepChaste {
 		conn.log.Debug("avoiding promiscuous mode, if possible, on all network interfaces")
