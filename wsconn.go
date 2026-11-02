@@ -34,7 +34,7 @@ import (
 // already closing.
 //    - note to self: graceful close in progress.
 //    - send close control message, informing the client about the process
-//      termination reason (mutex'd with piper writer).
+//      termination reason (WriteControl, so concurrently with piper writes).
 //    - wait for client's close control message (in websocket watcher).
 //    - close websocket.
 //
@@ -43,7 +43,7 @@ import (
 // already closing.
 //    - note to self: graceful close in progress.
 //    - send close control message, informing the client about the process
-//      failure reason (mutex'd with piper writer).
+//      failure reason (WriteControl, so concurrently with piper writes).
 //    - wait for client's close control message (in websocket watcher).
 //    - close websocket.
 //

@@ -51,8 +51,8 @@ services:
             - DAC_READ_SEARCH # for discovering and using bind-mounted network namespaces
             - CAP_NET_ADMIN   # to configure network interface capturing
             - CAP_NET_RAW     # for, erm, well, capturing?
-        # Essential, as we need the full PID view in order to make nsenter do
-        # its job.
+        # Essential, as we need the full PID view in order to reference the
+        # network namespaces of containers via their processes.
         pid: host
         networks:
             00-default:

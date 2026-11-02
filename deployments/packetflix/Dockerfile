@@ -60,7 +60,7 @@ RUN setcap "cap_sys_admin,cap_sys_chroot,cap_sys_ptrace,cap_dac_read_search,cap_
 # -- 2nd stage ---------------------------------------------------------------
 #
 # Build the final Docker image, containing only our Packetflix application and
-# the required additional external tools, namely: nsenter and dumpcap.
+# the required additional external tool, namely: dumpcap.
 FROM alpine:${ALPINE_VERSION} AS final
 LABEL maintainer="Harald Albrecht <harald.albrecht@siemens.com>"
 COPY --from=builder /packetflix /
@@ -75,6 +75,6 @@ RUN apk add --no-cache wireshark-common && \
     chmod a+x /usr/bin/dumpcap && \
     apk info -L wireshark-common | sed "1d;/^usr\/bin\/dumpcap/d;/^usr\/lib\/lib/d" | xargs rm -f && \
     rm -f /sbin/apk && rm -rf /etc/apk /lib/apk /usr/share/apk /var/lib/apk
-EXPOSE 5000
+EXPOSE 5001
 USER 65534
 ENTRYPOINT ["/packetflix", "--debug"]

@@ -23,8 +23,9 @@ jobs:
         run: |
           git fetch --prune --unshallow --tags --force
 
-      - name: Burn in version information
-        run: go generate .
+      - name: Determine version
+        # The Docker build context lacks .git, so pass the version explicitly.
+        run: echo "VERSION=$(git describe --tags --always --dirty)" >> "$GITHUB_ENV"
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
@@ -53,20 +54,6 @@ jobs:
             type=semver,pattern={{major}}
             type=raw,value={{sha}},enable=${{ github.ref_type != 'tag' }}
 
-      - name: Prepare (fake) Go workspace and build contexts
-        shell: bash
-        run: |
-          mkdir .emptyctx
-          NUMCONTEXTS=9
-          buildcontexts=""
-          for ((ctxno=1;ctxno<=NUMCONTEXTS;ctxno++)); do
-            buildcontexts+=$'\n'"bctx${ctxno}=.emptyctx"
-          done
-          EOF="**ENDOFTHEINTERNET**"
-          echo "BUILDCONTEXTS<<$EOF" >> $GITHUB_ENV
-          echo "$buildcontexts" >> $GITHUB_ENV
-          echo "$EOF" >> $GITHUB_ENV
-
       - name: Build and push Docker image
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
@@ -76,7 +63,5 @@ jobs:
           push: ${{ github.ref_type == 'tag' }}
           tags: ${{ steps.metadata.outputs.tags }}
           labels: ${{ steps.metadata.outputs.labels }}
-          build-args: WSDISKPATHS=./packetflix
-          build-contexts: |
-            ${{ env.BUILDCONTEXTS }}
+          build-args: VERSION=${{ env.VERSION }}
           outputs: type=image,name=target,annotation-index.org.opencontainers.image.description=Virtual network packet capture streaming service

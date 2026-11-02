@@ -16,8 +16,10 @@ are valid, so the capture service can simply kick off capturing without further
 hesitation.
 
 > Please note that the sequence diagrams are slightly simplified as to not
-> clobber them with the ugly implementation details of using a reactor for
-> asynchronuous I/O handling.
+> clobber them with the implementation details of the Go routines involved.
+> Especially, Packetflix starts `dumpcap` from a separate OS thread that it has
+> switched into the target's network namespace, passing on the necessary
+> capabilities as ambient capabilities.
 
 ```plantuml
 hide footbox
@@ -26,7 +28,6 @@ boundary Wireshark
 participant ClusterShark <<extcap plugin>>
 activate ClusterShark
 entity Packetflix <<service>>
-participant nsenter <<executable>>
 participant dumpcap <<executable>>
 
 create ClusterShark
@@ -34,17 +35,12 @@ Wireshark -> ClusterShark : ""--""capture
 
 ClusterShark -> Packetflix : websocket.connect\n/capture?container=...
 activate Packetflix
-  create nsenter
-  Packetflix -> nsenter : spawn\nnsenter ""--""no-fork
-  activate nsenter
-
 ClusterShark <-- Packetflix : websocket.connected
+  Packetflix -> Packetflix : setns(netns)
+  create dumpcap
+  Packetflix -> dumpcap : spawn
+  activate dumpcap
 deactivate Packetflix
-
-    create dumpcap
-    nsenter -> dumpcap : exec
-    activate dumpcap
-  deactivate nsenter
 
 |||
 
@@ -62,7 +58,7 @@ Wireshark -> ClusterShark : fifo.close
 ClusterShark -> Packetflix : websocket.close
 activate Packetflix
   Packetflix -> dumpcap : kill SIGTERM
-  Packetflix -> Packetflix : waitpit
+  Packetflix -> Packetflix : waitpid
   activate Packetflix
     Packetflix <-- dumpcap
   deactivate Packetflix
@@ -92,7 +88,6 @@ participant ClusterShark <<extcap plugin>>
 activate ClusterShark
 entity Packetflix <<service>>
 entity Ghostwire <<service>>
-participant nsenter <<executable>>
 participant dumpcap <<executable>>
 
 create ClusterShark
@@ -100,6 +95,7 @@ Wireshark -> ClusterShark : ""--""capture
 
 ClusterShark -> Packetflix : websocket.connect\n/capture?container=...
 activate Packetflix
+ClusterShark <-- Packetflix : websocket.connected
   Packetflix -> Ghostwire : GET /mobyshark
 deactivate Packetflix
   activate Ghostwire
@@ -107,17 +103,11 @@ deactivate Packetflix
 Packetflix <-- Ghostwire
   deactivate Ghostwire
 activate Packetflix
-  create nsenter
-  Packetflix -> nsenter : spawn\nnsenter ""--""no-fork
-  activate nsenter
-
-ClusterShark <-- Packetflix : websocket.connected
+  Packetflix -> Packetflix : setns(netns)
+  create dumpcap
+  Packetflix -> dumpcap : spawn
+  activate dumpcap
 deactivate Packetflix
-
-    create dumpcap
-    nsenter -> dumpcap : exec
-    activate dumpcap
-  deactivate nsenter
 
 |||
 
@@ -135,7 +125,7 @@ Wireshark -> ClusterShark : fifo.close
 ClusterShark -> Packetflix : websocket.close
 activate Packetflix
   Packetflix -> dumpcap : kill SIGTERM
-  Packetflix -> Packetflix : waitpit
+  Packetflix -> Packetflix : waitpid
   activate Packetflix
     Packetflix <-- dumpcap
   deactivate Packetflix

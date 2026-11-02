@@ -75,7 +75,7 @@ func (g *Grumbler) grumbleLine(line string) {
 }
 
 // Reason returns the grumbling reason why something failed miserably. It strips
-// off the well-known prefixes from the capture and nsenter programs in order to
+// off the well-known prefix from the capture program in order to
 // keep the reason string short, because websocket close control message only
 // allow for less than 128 octets. Looks like the ISO/OSI finally got their
 // revenge by sneaking in their .CLOSE service primitives into websockets...!
