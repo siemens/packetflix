@@ -12,11 +12,14 @@ on:
 jobs:
 
   buildandtest:
-    name: Test Build on Go ${{matrix.go}}
+    name: Build and test on Go ${{matrix.go}}
     runs-on: ubuntu-latest
     strategy:
       matrix:
         go: [ 'stable', 'oldstable' ]
+    env:
+      # Fail instead of silently switching to the go.mod toolchain.
+      GOTOOLCHAIN: local
 
     steps:
       - name: Set up Go ${{matrix.go}}
@@ -28,5 +31,14 @@ jobs:
       - name: Check out code into the Go module directory
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      - name: Install dumpcap and tshark for end-to-end capture tests
+        run: sudo .devcontainer/tshark/install.sh
+
       - name: Test build of Go packages
-        run: go build -v .
+        run: go build -v ./...
+
+      - name: Test as non-root
+        run: go test -race -p 1 -count=1 ./...
+
+      - name: Test as root
+        run: go test -race -p 1 -count=1 -exec 'sudo -n' ./...
