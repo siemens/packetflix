@@ -1,7 +1,7 @@
+.git/
 .vscode/
-.emptyctx/
 deployments/
 images/
 /packetflix
-scripts/
 dist/
+coverage.html

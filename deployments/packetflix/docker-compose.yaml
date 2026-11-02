@@ -1,11 +1,15 @@
 # PacketFlix network packet capture as a (streaming) service. This project
-# requires the separate GhostWire project in order to discover network and
+# requires the separate Ghostwire project in order to discover network and
 # container information.
-version: "2.4"
 services:
     # Our capture-as-a-Service ;)
     packetflix:
         image: 'packetflix'
+        build:
+            context: ../..
+            dockerfile: deployments/packetflix/Dockerfile
+            args:
+                VERSION: ${VERSION:-}
         read_only: true
         command:
         - "--port=5001"
@@ -47,8 +51,8 @@ services:
             - DAC_READ_SEARCH # for discovering and using bind-mounted network namespaces
             - CAP_NET_ADMIN   # to configure network interface capturing
             - CAP_NET_RAW     # for, erm, well, capturing?
-        # Essential, as we need the full PID view in order to make nsenter do
-        # its job.
+        # Essential, as we need the full PID view in order to reference the
+        # network namespaces of containers via their processes.
         pid: host
         networks:
             00-default:

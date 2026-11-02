@@ -7,51 +7,65 @@
 // service. This is necessary in order to support the mark II user interface of
 // Ghostwire, which is a React-based SPA (single page application).
 
-package main
+package packetflix
 
 import (
-	"fmt"
-	"net/http"
+	"log/slog"
 	"net/http/httputil"
+	"net/url"
 	"path"
-
-	log "github.com/sirupsen/logrus"
 )
 
-// Handle the /discover route: it gets forwarded into the associated discovery
-// service HTTP endpoint. Includes dreaded URL path rewriting.
-var gwHandler = &httputil.ReverseProxy{
-	// The "director" (a.k.a. URL rewriter) rewrites the original request URL in
-	// order to now address the discovery service. We have to do path rewriting
-	// here, which will roughly work, as the discovery service GhostWire has
-	// been developed with path rewriting proxies in mind.
-	//
-	// NOTE: since this is a request received on the server side, Request.URL
-	// will *NOT* contain any scheme and host information! Also, we expect our
-	// handler to be called with any path prefix having already been removed and
-	// the URL now is relative!
-	Director: func(req *http.Request) {
-		log.Debugf("handling %q...", req.URL.Path)
+// NewDiscoveryProxy returns a reverse proxy to the discovery service at the
+// specified "host:port" address. Includes dreaded URL path rewriting.
+//
+// Contract with Ghostwire: its React SPA is served via
+// github.com/thediveo/spaserve, which derives the SPA's HTML base path from the
+// X-Forwarded-Prefix and X-Forwarded-Uri request headers set by upstream
+// proxies, comparing them against the request path it receives. The SPA then
+// builds its "packetflix:" capture URLs as <base>capture and its websocket URLs
+// as <base>mobydig, so its base must map onto our root. Thus, this proxy MUST:
+//   - pass X-Forwarded-Prefix and X-Forwarded-Uri through unmodified (Rewrite
+//     only strips Forwarded and X-Forwarded-{For,Host,Proto}, which Ghostwire
+//     doesn't use);
+//   - forward the request path unchanged except for path.Clean normalization
+//     (spaserve cleans it the same way before deriving the base), or else set
+//     X-Forwarded-Prefix to whatever path prefix it strips;
+//   - set the CaptureEnableHeader (Ghostwire only checks its presence) so the
+//     SPA shows its capture buttons.
+//
+// Breaking this makes the SPA load its assets from wrong URLs in path-rewriting
+// deployments, or makes its capture links miss our /capture endpoint.
+func NewDiscoveryProxy(discovery string) *httputil.ReverseProxy {
+	return &httputil.ReverseProxy{
+		// The rewriter rewrites the original request URL in order to now
+		// address the discovery service. We have to do path rewriting here,
+		// which will roughly work, as the discovery service Ghostwire has been
+		// developed with path rewriting proxies in mind.
+		//
+		// NOTE: since this is a request received on the server side,
+		// Request.URL will *NOT* contain any scheme and host information! Also,
+		// we expect our handler to be called with any path prefix having
+		// already been removed and the URL now is relative!
+		Rewrite: func(pr *httputil.ProxyRequest) {
+			req := pr.Out
+			slog.Debug("handling request", slog.String("path", req.URL.Path))
 
-		// Handle the old plugin discovery API path, too.
-		if req.URL.Path == "/discover/mobyshark" {
-			req.URL.Path = "/mobyshark"
-		}
+			// Handle the old plugin discovery API path, too.
+			if req.URL.Path == "/discover/mobyshark" {
+				req.URL.Path = "/mobyshark"
+			}
 
-		req.URL.Host = fmt.Sprintf("%s:%d", DiscoveryService, DiscoveryPort)
-		req.URL.Path = path.Join("/", req.URL.Path)
-		// see https://github.com/golang/go/issues/28168 about having to change
-		// req.Host also because it gets preferred ... and the stock
-		// httputil.NewSingleHostReverseProxy is buggy. Oh ... well. :(
-		req.Host = req.URL.Host
-		req.URL.Scheme = "http"
-		// See also httputil.NewSingleHostReverseProxy for handling the
-		// User-Agent header.
-		if _, ok := req.Header["User-Agent"]; !ok {
-			req.Header.Set("User-Agent", "")
-		}
-		// Signal the Ghostwire SPA to enable capture functionality in its UI.
-		req.Header.Set(CaptureEnableHeader, "Affirmative, Dave")
-		log.Debugf("forwarding/reverse proxying to %q", req.URL.String())
-	},
+			req.URL.Path = path.Join("/", req.URL.Path)
+			pr.SetURL(&url.URL{
+				Scheme: "http",
+				Host:   discovery,
+			})
+			// Keeps X-Forwarded-{Prefix,Uri} intact, see the Ghostwire contract above.
+			pr.SetXForwarded()
+			// Signal the Ghostwire SPA to enable capture functionality in its UI.
+			req.Header.Set(CaptureEnableHeader, "Affirmative, Dave")
+			slog.Debug("forwarding/reverse proxying", slog.String("url", req.URL.String()))
+		},
+	}
 }

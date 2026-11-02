@@ -5,11 +5,11 @@
 // A Piper writes the packet capture data stream fed into it via stdin from
 // the packet capture process to the associated websocket connection.
 
-package main
+package packetflix
 
 import (
 	"github.com/gorilla/websocket"
-	log "github.com/sirupsen/logrus"
+	"github.com/thediveo/nonstd/xslog"
 )
 
 // Piper pipes all packet capture output straight into a websocket connection.
@@ -26,16 +26,15 @@ func NewPiper(conn *WSConn) *Piper {
 	}
 }
 
-// Pipes all packet data received into our associated websocket. If there is a
-// problem writing, then we simply close the websocket connection, because it
-// is already in error state, so further writes including control messages
-// aren't possible anymore.
+// Write pipes all packet data received into our associated websocket. If the
+// websocket is closing or broken, then Write silently drops the data, as the
+// websocket watcher then terminates the capture process anyway; failing here
+// would otherwise make a normal end of capture look like a capture process
+// failure.
 func (p *Piper) Write(data []byte) (n int, err error) {
-	err = p.WriteMessage(websocket.BinaryMessage, data)
-	if err != nil {
-		log.Debugf("websocket broken: %s", err.Error())
+	if err := p.WriteMessage(websocket.BinaryMessage, data); err != nil && !p.Failed {
+		p.log.Debug("websocket closing or broken, dropping capture data", xslog.Error(err))
 		p.Failed = true
 	}
-	n = len(data)
-	return
+	return len(data), nil
 }

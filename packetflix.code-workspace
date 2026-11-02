@@ -4,5 +4,29 @@
 			"path": "."
 		}
 	],
-	"settings": {}
+	"settings": {
+		"go.lintTool": "golangci-lint-v2",
+		"go.alternateTools": {
+			// golangci-lint on PATH instead of vscode-go's possibly stale own install.
+			"golangci-lint-v2": "golangci-lint",
+			"customFormatter": "golangci-lint"
+		},
+		"go.formatTool": "custom",
+		"go.formatFlags": [
+			"fmt",
+			"--stdin"
+		],
+		"gopls": {
+			"ui.semanticTokens": true,
+			// https://github.com/golang/vscode-go/blob/master/docs/settings.md#uidiagnosticanalyses
+			"ui.diagnostic.analyses": {},
+			// https://github.com/golang/vscode-go/blob/master/docs/settings.md#uicodelenses
+			"ui.codelenses": {
+				"vulncheck": true
+			}
+		},
+		"markdown.styles": [
+			"./.vscode/markdown-preview.css"
+		]
+	}
 }

@@ -16,8 +16,10 @@ are valid, so the capture service can simply kick off capturing without further
 hesitation.
 
 > Please note that the sequence diagrams are slightly simplified as to not
-> clobber them with the ugly implementation details of using a reactor for
-> asynchronuous I/O handling.
+> clobber them with the implementation details of the Go routines involved.
+> Especially, Packetflix starts `dumpcap` from a separate OS thread that it has
+> switched into the target's network namespace, passing on the necessary
+> capabilities as ambient capabilities.
 
 ```plantuml
 hide footbox
@@ -26,7 +28,6 @@ boundary Wireshark
 participant ClusterShark <<extcap plugin>>
 activate ClusterShark
 entity Packetflix <<service>>
-participant nsenter <<executable>>
 participant dumpcap <<executable>>
 
 create ClusterShark
@@ -34,17 +35,12 @@ Wireshark -> ClusterShark : ""--""capture
 
 ClusterShark -> Packetflix : websocket.connect\n/capture?container=...
 activate Packetflix
-  create nsenter
-  Packetflix -> nsenter : spawn\nnsenter ""--""no-fork
-  activate nsenter
-
 ClusterShark <-- Packetflix : websocket.connected
+  Packetflix -> Packetflix : setns(netns)
+  create dumpcap
+  Packetflix -> dumpcap : spawn
+  activate dumpcap
 deactivate Packetflix
-
-    create dumpcap
-    nsenter -> dumpcap : exec
-    activate dumpcap
-  deactivate nsenter
 
 |||
 
@@ -62,7 +58,7 @@ Wireshark -> ClusterShark : fifo.close
 ClusterShark -> Packetflix : websocket.close
 activate Packetflix
   Packetflix -> dumpcap : kill SIGTERM
-  Packetflix -> Packetflix : waitpit
+  Packetflix -> Packetflix : waitpid
   activate Packetflix
     Packetflix <-- dumpcap
   deactivate Packetflix
@@ -77,7 +73,7 @@ The container reference might be stale in that it still references a valid
 container by `name` and `prefix`, but the `netns` might be invalid. This is
 crosschecked and detected on the basis of `pid` and `starttime`. If the
 `starttime`doesn't match the one of the process `pid`, then the capture service
-needs to contact the discovery service (that's GhostWire) in order to fetch the
+needs to contact the discovery service (that's Ghostwire) in order to fetch the
 most up-to-date network namespace ID.
 
 If the data returned by the discovery service still lists the container by
@@ -91,8 +87,7 @@ boundary Wireshark
 participant ClusterShark <<extcap plugin>>
 activate ClusterShark
 entity Packetflix <<service>>
-entity GhostWire <<service>>
-participant nsenter <<executable>>
+entity Ghostwire <<service>>
 participant dumpcap <<executable>>
 
 create ClusterShark
@@ -100,24 +95,19 @@ Wireshark -> ClusterShark : ""--""capture
 
 ClusterShark -> Packetflix : websocket.connect\n/capture?container=...
 activate Packetflix
-  Packetflix -> GhostWire : GET /mobyshark
-deactivate Packetflix
-  activate GhostWire
-  |||
-Packetflix <-- GhostWire
-  deactivate GhostWire
-activate Packetflix
-  create nsenter
-  Packetflix -> nsenter : spawn\nnsenter ""--""no-fork
-  activate nsenter
-
 ClusterShark <-- Packetflix : websocket.connected
+  Packetflix -> Ghostwire : GET /mobyshark
 deactivate Packetflix
-
-    create dumpcap
-    nsenter -> dumpcap : exec
-    activate dumpcap
-  deactivate nsenter
+  activate Ghostwire
+  |||
+Packetflix <-- Ghostwire
+  deactivate Ghostwire
+activate Packetflix
+  Packetflix -> Packetflix : setns(netns)
+  create dumpcap
+  Packetflix -> dumpcap : spawn
+  activate dumpcap
+deactivate Packetflix
 
 |||
 
@@ -135,7 +125,7 @@ Wireshark -> ClusterShark : fifo.close
 ClusterShark -> Packetflix : websocket.close
 activate Packetflix
   Packetflix -> dumpcap : kill SIGTERM
-  Packetflix -> Packetflix : waitpit
+  Packetflix -> Packetflix : waitpid
   activate Packetflix
     Packetflix <-- dumpcap
   deactivate Packetflix

@@ -9,7 +9,7 @@
 [![PkgGoDev](https://pkg.go.dev/badge/github.com/siemens/packetflix)](https://pkg.go.dev/github.com/siemens/packetflix)
 [![GitHub](https://img.shields.io/github/license/siemens/packetflix)](https://img.shields.io/github/license/siemens/packetflix)
 ![build and test](https://github.com/siemens/packetflix/workflows/build%20and%20test/badge.svg?branch=main)
-[![Go Report Card](https://goreportcard.com/badge/github.com/siemens/packetflix)](https://goreportcard.com/report/github.com/siemens/packetflix)
+![Coverage](https://img.shields.io/badge/Coverage-94.2%25-brightgreen)
 
 > **Finally! Container "binge watching" live _packet_ streams for
 > Wireshark(nado) nerds!**
@@ -32,6 +32,19 @@ Packetflix...
   compatible with HTTP/websocket proxies.
 - ...is **not** a containerized Wireshark.
 - ...works on amd64 and arm64.
+
+## Edgeshark Project
+
+Packetflix is part of the "Edgeshark" project that consist of several
+repositories:
+- [Edgeshark Hub repository](https://github.com/siemens/edgeshark) with Edgeshark Industrial Edge App.
+- [Ghostwire discovery service](https://github.com/siemens/ghostwire)
+- **Packetflix packet streaming service**
+- [Containershark Extcap plugin for
+  Wireshark](https://github.com/siemens/cshargextcap)
+- [csharg (CLI)](https://github.com/siemens/csharg)
+- [mobydig](https://github.com/siemens/mobydig)
+- [ieddata](https://github.com/siemens/ieddata)
 
 ## Quick Start
 
@@ -65,26 +78,21 @@ four clicks (well, five) and you're capturing live network traffic from inside
 any container. And without having to prepare or modify your containers
 beforehand.
 
-## Project Map
-
-The Containershark extcap plugin is part of the "Edgeshark" project that consist
-of several repositories:
-
-- [Edgeshark Hub repository](https://github.com/siemens/edgeshark)
-- [G(h)ostwire discovery service](https://github.com/siemens/ghostwire)
-- 🖝 **Packetflix packet streaming service** 🖜
-- [Containershark Extcap plugin for Wireshark](https://github.com/siemens/cshargextcap)
-- support modules:
-  - [csharg (CLI)](https://github.com/siemens/csharg)
-  - [mobydig](https://github.com/siemens/mobydig)
-  - [ieddata](https://github.com/siemens/ieddata)
-
 ## Deploying Packetflix
 
-Building the Packetflix service requires the Go toolchain, `make`, a C compiler
-(used by cgeo), and finally Docker installed.
+Most probably, you want to deploy Packetflix as part of Edgeshark, together with
+the Ghostwire discovery service. Please see the [Edgeshark Quick
+Start](https://github.com/siemens/edgeshark#quick-start) for ready-to-use Docker
+compose deployments, as well as the Edgeshark Siemens Industrial Edge app.
 
-After deploying the [Ghostwire](https://github.com/siemens/ghostwire) service first, Packetflix can be deployed in the same way:
+### Building and Deploying From Source
+
+Building the Packetflix service requires the Go toolchain, `make`, a C compiler
+(as cgo is required), and finally Docker with the compose plugin v2 and Buildx
+installed.
+
+After deploying the [Ghostwire](https://github.com/siemens/ghostwire) service
+first, Packetflix can be deployed in the same way:
 
 ```bash
 make deploy
@@ -96,18 +104,21 @@ make deploy
 
 ## Packetflix Service Args
 
-- `--port`, `-p`: port to expose the capture service on, defaults to port 6666.
-- `--gw-port`: local port where the GhostWire discovery service can be reached,
+- `--port`, `-p`: port to expose the capture service on, defaults to port 5001.
+- `--discovery-service`: name or address of the Ghostwire discovery service,
+  defaults to `127.0.0.1`.
+- `--gw-port`: port where the Ghostwire discovery service can be reached,
   defaults to port 5000.
 - `--proxy-discovery`: enables forwarding HTTP requests to the Ghostwire
   discovery service at `/`, unless they're part of the Packetflix API.
 
 - `--debug`: enables debugging messages.
+- `--tinted`: tints structured logging output.
 - `--log-requests`: log HTTP/WS requests.
 - `--log-headers`: log HTTP/WS request headers.
 
-- `--version`: show version string.
-- `--help`, `-h`: show help with available flag paremeters.
+- `--version`, `-v`: show version string.
+- `--help`, `-h`: show help with available flag parameters.
 
 ## Container Deployment Notes
 
@@ -138,20 +149,24 @@ process (that is, not as UID0).
     the network namespaces of containers. See also [man 7
     setns](https://man7.org/linux/man-pages/man2/setns.2.html).
 
-  - `CAP_CHROOT` is additionally needed to switch into mount namespaces of
-    containers, in order to read their DNS configuration files (such as
-    `/etc/host`, `/etc/resolve`, et cetera). See also [man 7
+  - `CAP_SYS_CHROOT` is additionally needed to switch into mount namespaces of
+    containers, in order to discover network namespaces bind-mounted inside
+    them. See also [man 7
     setns](https://man7.org/linux/man-pages/man2/setns.2.html).
 
   - `CAP_SYS_PTRACE` in order to be able to reference namespaces: the
     `nsfs` (namespace) filesystem requires this "god" capability in order to
     access namespace-related `/proc` nodes, such as `/proc/$PID/ns/*`. And
-    GhostWire does not even use any `ptrace(2)` syscalls, it just reads from
+    Packetflix does not even use any `ptrace(2)` syscalls, it just reads from
     `/proc`. Another clear victory for the capabilities architecture: in order to
     discover namespaces, give the process process tracing and modification powers.
     Please see also [Access /proc/pid/ns/net without running query process as
     root?](https://unix.stackexchange.com/questions/443382/access-proc-pid-ns-net-without-running-query-process-as-root)
     for details and references to the `nsfs` filesystem involved.
+
+  - `CAP_DAC_READ_SEARCH` in order to discover network namespaces that are
+    bind-mounted into directories not accessible to a non-root process, such
+    as Docker's `/run/docker/netns/`.
 
 - `dumpcap`:
 
@@ -169,6 +184,7 @@ services:
       - SYS_ADMIN # change namespaces
       - SYS_CHROOT # change mount namespaces
       - SYS_PTRACE # access nsfs namespace information
+      - DAC_READ_SEARCH # discover bind-mounted network namespaces
       - CAP_NET_ADMIN # to configure network interface capturing
       - CAP_NET_RAW # for, erm, well, capturing?
 ```
@@ -177,10 +193,9 @@ services:
 
 Packetflix can be run as a non-root user process, when given the above mentioned
 capabilities. The required (effective) capabilities can be given to a non-root
-process by using file capabilities:
-
-- `/packetflix`
-- `/usr/bin/dumpcap`
+process by using file capabilities on `/packetflix`. Packetflix then passes
+`CAP_NET_ADMIN` and `CAP_NET_RAW` on to `dumpcap` as ambient capabilities, so
+`/usr/bin/dumpcap` doesn't need any file capabilities.
 
 ### Packetflix Container and AppArmor
 

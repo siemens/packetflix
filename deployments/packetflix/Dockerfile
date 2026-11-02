@@ -8,9 +8,8 @@
 # Nota bene: not all existing value combinations with respect to Alpine and Node
 # versions might work, so you'll need to check Docker hub for the available base
 # image versions.
-ARG ALPINE_VERSION=3.19
-ARG ALPINE_PATCH=1
-ARG GO_VERSION=1.21.7
+ARG ALPINE_VERSION=3.23
+ARG GO_VERSION=1.26
 
 # 0th stage: https://github.com/tonistiigi/xx/blob/master/README.md
 FROM --platform=${BUILDPLATFORM} tonistiigi/xx AS cc-helpers
@@ -25,19 +24,8 @@ FROM --platform=${BUILDPLATFORM} golang:${GO_VERSION}-alpine${ALPINE_VERSION} AS
 ARG BUILDPLATFORM
 ARG TARGETPLATFORM
 
-ARG WSDISKPATHS
-ARG MOD1=./
-ARG MOD2=./
-ARG MOD3=./
-ARG MOD4=./
-ARG MOD5=./
-ARG MOD6=./
-ARG MOD7=./
-ARG MOD8=./
-ARG MOD9=./
-
 # General warm-up
-RUN apk add --no-cache git clang lld libcap-utils
+RUN apk add --no-cache clang lld libcap-utils
 COPY --from=cc-helpers / /
 RUN xx-apk add --no-cache gcc musl-dev
 # https://github.com/tonistiigi/xx/blob/master/README.md#go--cgo
@@ -46,50 +34,34 @@ ENV CGO_ENABLED=1
 # anymore, so do this now and cache it.
 RUN xx-go build std
 
-WORKDIR /ws
-# Copy the additionally used modules into the soon-to-be workspace.
-COPY --from=bctx1 . ${MOD1}
-COPY --from=bctx2 . ${MOD2}
-COPY --from=bctx3 . ${MOD3}
-COPY --from=bctx4 . ${MOD4}
-COPY --from=bctx5 . ${MOD5}
-COPY --from=bctx6 . ${MOD6}
-COPY --from=bctx7 . ${MOD7}
-COPY --from=bctx8 . ${MOD8}
-COPY --from=bctx9 . ${MOD9}
-
-# Make sure we have the main module containing a main package to be build...
-COPY go.mod go.sum ./packetflix/
-
-# Establish the Go workspace
-RUN go work init ${WSDISKPATHS}
-
-WORKDIR /ws/packetflix
-# We now try to cache only the dependencies in a separate layer, so we can speed
-# up things in case the dependencies do not change. This then reduces the amount
-# of fetching and compiling required when compiling the final binary later.
-RUN go mod download
-# And now, finally, we build the packetflix service itself.
-COPY *.go ./
+WORKDIR /src
+# We now try to cache only the dependencies, so we can speed up things in case
+# the dependencies do not change.
+COPY go.mod go.sum ./
+RUN --mount=type=cache,target=/go/pkg \
+    go mod download
 
 ARG LDFLAGS="-s -w -extldflags=-static"
 ARG TAGS="osusergo,netgo"
+# The build context lacks .git, so the version needs to be passed in, such as
+# from "git describe --tags".
+ARG VERSION=""
 
 RUN --mount=target=. \
     --mount=type=cache,target=/root/.cache/go-build \
     --mount=type=cache,target=/go/pkg \
     xx-go build -v \
-        -tags=$"{TAGS}" \
-        -ldflags="${LDFLAGS}" \
-        -o /packetflix . && \
+        -tags="${TAGS}" \
+        -ldflags="${LDFLAGS} -X main.version=${VERSION}" \
+        -o /packetflix ./cmd/packetflix && \
     xx-verify --static /packetflix
-RUN setcap "cap_sys_admin,cap_sys_chroot,cap_sys_ptrace,cap_net_admin,cap_net_raw+ep" /packetflix
+RUN setcap "cap_sys_admin,cap_sys_chroot,cap_sys_ptrace,cap_dac_read_search,cap_net_admin,cap_net_raw+ep" /packetflix
 
 # -- 2nd stage ---------------------------------------------------------------
 #
 # Build the final Docker image, containing only our Packetflix application and
-# the required additional external tools, namely: nsenter and dumpcap.
-FROM alpine:${ALPINE_VERSION}.${ALPINE_PATCH} as final
+# the required additional external tool, namely: dumpcap.
+FROM alpine:${ALPINE_VERSION} AS final
 LABEL maintainer="Harald Albrecht <harald.albrecht@siemens.com>"
 COPY --from=builder /packetflix /
 # Now install the required dumpcap tool ... which brings in much more than we
@@ -103,6 +75,6 @@ RUN apk add --no-cache wireshark-common && \
     chmod a+x /usr/bin/dumpcap && \
     apk info -L wireshark-common | sed "1d;/^usr\/bin\/dumpcap/d;/^usr\/lib\/lib/d" | xargs rm -f && \
     rm -f /sbin/apk && rm -rf /etc/apk /lib/apk /usr/share/apk /var/lib/apk
-EXPOSE 5000
+EXPOSE 5001
 USER 65534
 ENTRYPOINT ["/packetflix", "--debug"]

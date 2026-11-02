@@ -5,44 +5,42 @@
 // How to pass capabilities to a child process (such as dumpcap) without having
 // to give the binary file itself the capabilities...
 
-package main
+package packetflix
 
 import (
 	"fmt"
 
-	caps "github.com/syndtr/gocapability/capability"
+	"github.com/thediveo/caps/v2"
 	"golang.org/x/sys/unix"
 )
 
-// SetAmbient sets the specified ambient capabilities, at least if they are also
-// currently effective.
-func SetAmbient(ambcaps ...caps.Cap) error {
-	// Capabilities are per thread, not per process.
-	tid := unix.Gettid()
-	mycaps, err := caps.NewPid2(tid) // not sure, why deprecating NewPid() when it does the following anyway
-	if err == nil {
-		err = mycaps.Load()
+// SetAmbient raises the specified capabilities in the ambient set of the
+// calling OS thread, so that they get passed on to binaries without file
+// capabilities that are exec'ed from this thread. The calling go routine must
+// be locked to its OS thread and the capabilities must be permitted.
+func SetAmbient(capnos ...int) error {
+	if len(capnos) == 0 {
+		return nil
 	}
+	taskcaps, err := caps.OfCurrentTask()
 	if err != nil {
-		return fmt.Errorf("cannot query OS-thread capability sets: %s", err.Error())
+		return fmt.Errorf("cannot query OS-thread capability sets: %w", err)
 	}
-	// Next, prepare for setting the ambient capabilities from the specified
-	// set, but check against the currently effective capabilities.
-	ambs := []caps.Cap{}
-	for cap := caps.Cap(tid); cap <= caps.CAP_LAST_CAP; cap++ {
-		if mycaps.Get(caps.EFFECTIVE, cap) {
-			for _, c := range ambcaps {
-				if cap == c {
-					ambs = append(ambs, cap)
-					break
-				}
-			}
+	for _, capno := range capnos {
+		if !taskcaps.Permitted().Has(capno) {
+			return fmt.Errorf("capability %s not permitted", caps.CapabilityNameByNumber[capno])
 		}
 	}
-	// Now actually set the ambient capabilities for the process.
-	mycaps.Set(caps.AMBIENT, ambs...)
-	if err := mycaps.Apply(caps.AMBIENT); err != nil {
-		return fmt.Errorf("cannot set ambient capabilities: %s", err.Error())
+	// The kernel only allows raising ambient capabilities that are both
+	// permitted and inheritable.
+	if _, err := taskcaps.Inheritable().Add(capnos[0], capnos[1:]...).ApplyToCurrentTask(); err != nil {
+		return fmt.Errorf("cannot set inheritable capabilities: %w", err)
+	}
+	for _, capno := range capnos {
+		if err := unix.Prctl(unix.PR_CAP_AMBIENT, unix.PR_CAP_AMBIENT_RAISE, uintptr(capno), 0, 0); err != nil {
+			return fmt.Errorf("cannot raise ambient capability %s: %w",
+				caps.CapabilityNameByNumber[capno], err)
+		}
 	}
 	return nil
 }
