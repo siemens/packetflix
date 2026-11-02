@@ -1,4 +1,6 @@
 .git/
+.github/
+*.md
 .vscode/
 deployments/
 images/

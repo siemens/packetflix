@@ -2,9 +2,14 @@ name: Build and release multi-arch container images
 
 on:
   push:
+    # Builds on the default branch fill the build cache, as tag builds can only
+    # restore caches from their own tag or the default branch.
+    branches:
+      - main
     tags:
       - 'v[0-9]+.[0-9]+.[0-9]+'
       - 'v[0-9]+.[0-9]+.[0-9]+-*'
+  workflow_dispatch:
 
 env:
   PLATFORMS: linux/amd64,linux/arm64
@@ -26,6 +31,9 @@ jobs:
       - name: Determine version
         # The Docker build context lacks .git, so pass the version explicitly.
         run: echo "VERSION=$(git describe --tags --always --dirty)" >> "$GITHUB_ENV"
+
+      - name: Determine reproducible build timestamp
+        run: echo "SOURCE_DATE_EPOCH=$(git log -1 --pretty=%ct)" >> "$GITHUB_ENV"
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
@@ -64,4 +72,6 @@ jobs:
           tags: ${{ steps.metadata.outputs.tags }}
           labels: ${{ steps.metadata.outputs.labels }}
           build-args: VERSION=${{ env.VERSION }}
-          outputs: type=image,name=target,annotation-index.org.opencontainers.image.description=Virtual network packet capture streaming service
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          outputs: type=image,name=target,rewrite-timestamp=true,annotation-index.org.opencontainers.image.description=Virtual network packet capture streaming service
