@@ -203,15 +203,16 @@ func dumpcapArgs(args *Args) []string {
 		// keep (almost) quiet: no packet capture count, but still some initial messages :(
 		"-q",
 	}
-	// "Avoid promiscuous mode" applies only to network interfaces following it.
+	// "Avoid promiscuous mode" and the capture filter only become defaults for
+	// all network interfaces when they precede the first -i.
 	if args.KeepChaste {
 		captargs = append(captargs, "-p")
 	}
-	for _, nif := range args.NetworkInterfaces {
-		captargs = append(captargs, "-i", nif)
-	}
 	if args.CaptureFilter != "" {
 		captargs = append(captargs, "-f", args.CaptureFilter)
+	}
+	for _, nif := range args.NetworkInterfaces {
+		captargs = append(captargs, "-i", nif)
 	}
 	return captargs
 }

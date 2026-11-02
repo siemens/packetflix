@@ -30,7 +30,7 @@ var _ = Describe("capture handler", func() {
 				CaptureFilter: "tcp",
 				KeepChaste:    true,
 			},
-			[]string{"-p", "-i", "eth0", "-i", "lo", "-f", "tcp"}),
+			[]string{"-p", "-f", "tcp", "-i", "eth0", "-i", "lo"}),
 	)
 
 	It("refuses plain HTTP requests", func() {
