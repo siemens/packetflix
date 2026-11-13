@@ -8,7 +8,10 @@
 
 [![PkgGoDev](https://pkg.go.dev/badge/github.com/siemens/packetflix)](https://pkg.go.dev/github.com/siemens/packetflix)
 [![GitHub](https://img.shields.io/github/license/siemens/packetflix)](https://img.shields.io/github/license/siemens/packetflix)
-![build and test](https://github.com/siemens/packetflix/workflows/build%20and%20test/badge.svg?branch=main)
+[![build and test](https://github.com/siemens/packetflix/actions/workflows/buildandtest.yaml/badge.svg?branch=main)](https://github.com/siemens/packetflix/actions/workflows/buildandtest.yaml)
+<br/>
+![goroutines](https://img.shields.io/badge/go%20routines-not%20leaking-success)
+![file descriptors](https://img.shields.io/badge/file%20descriptors-not%20leaking-success)
 ![Coverage](https://img.shields.io/badge/Coverage-94.2%25-brightgreen)
 
 > **Finally! Container "binge watching" live _packet_ streams for
