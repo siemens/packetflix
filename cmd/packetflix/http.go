@@ -62,7 +62,7 @@ func requestLogger(h http.Handler, enabled bool) http.Handler {
 // forwarding everything else to the discovery service at the specified
 // "host:port" address.
 //
-// For unknown reasons the "thing" reponsible for demultiplexing incomming
+// For unknown reasons the "thing" responsible for demultiplexing incoming
 // HTTP requests onto HTTP handlers is termed a "multiplexer". Yet, this is a
 // demultiplexer. Confusing. See: https://en.wikipedia.org/wiki/Multiplexer
 func newDemux(discovery string, proxyDiscovery bool) *http.ServeMux {
