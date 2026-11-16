@@ -24,7 +24,7 @@ const (
 	// interface with capture button enabled.
 	CaptureEnableHeader = "Enable-Monolith"
 
-	// DiscoveryDeadline specifies the maximum amout of time to wait for the
+	// DiscoveryDeadline specifies the maximum amount of time to wait for the
 	// container discovery service to respond.
 	DiscoveryDeadline = 20 * time.Second
 

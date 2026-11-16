@@ -47,7 +47,7 @@ import (
 //    - wait for client's close control message (in websocket watcher).
 //    - close websocket.
 //
-// 3. client closes: we then need to acknowlege the close and terminate the
+// 3. client closes: we then need to acknowledge the close and terminate the
 // process -- please note that there's no graceful close in progress at the time
 // we receive the client's close.
 //    - note to self: graceful ack in progress.

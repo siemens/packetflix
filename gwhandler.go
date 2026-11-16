@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 // In case forwarding any non-capture API-related requests is enabled, then this
-// handler reverse proxies everthing not caught otherwise to the ghostwire
+// handler reverse proxies everything not caught otherwise to the ghostwire
 // service. This is necessary in order to support the mark II user interface of
 // Ghostwire, which is a React-based SPA (single page application).
 

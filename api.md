@@ -18,7 +18,7 @@ The following API paths are currently available:
 The version service is exposed via HTTP at the `/version` path.
 
 - parameters: _none_.
-- response: JSON document with the folowing atrributes:
+- response: JSON document with the following attributes:
   - `name`: name of capture service implementation, such as "packetflix"; this
     name never contains version information.
   - `version`: semantic version, such as `1.0.666`.
