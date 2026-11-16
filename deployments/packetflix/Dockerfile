@@ -139,15 +139,24 @@ RUN mkdir -p /rootfs && \
     test -L /rootfs/lib && \
     test -L /rootfs/sbin
 
+# -- 3rd stage ---------------------------------------------------------------
+#
+# Verify the assembled image: fails the build if the rootfs lacks any of
+# dumpcap's shared libraries.
+FROM scratch AS verify
+COPY --from=rootfs /rootfs/ /
+COPY --from=builder /packetflix /
+RUN ["/usr/bin/dumpcap", "--version"]
+
 # -- final stage -------------------------------------------------------------
 #
 # Build the final Docker image, containing only our Packetflix application and
-# the required additional external tool, namely: dumpcap.
+# the required additional external tool, namely: dumpcap. Taking the Packetflix
+# binary from the verify stage makes the final image depend on a successful
+# verification, yet without the (empty) layer of the verifying RUN.
 FROM scratch AS final
 COPY --from=rootfs /rootfs/ /
-COPY --from=builder /packetflix /
-# Fails the build if the rootfs lacks any of dumpcap's shared libraries.
-RUN ["/usr/bin/dumpcap", "--version"]
+COPY --from=verify /packetflix /
 EXPOSE 5001
 USER 65534
 ENTRYPOINT ["/packetflix", "--debug"]
