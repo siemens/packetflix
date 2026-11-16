@@ -37,9 +37,9 @@ FROM debian AS builder
 ARG TARGETPLATFORM
 
 # General warm-up
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends clang lld libcap2-bin && \
-    xx-apt-get install -y --no-install-recommends gcc libc6-dev
+RUN apt-get update -qq && \
+    apt-get install -qqy --no-install-recommends clang lld libcap2-bin && \
+    xx-apt-get install -qqy --no-install-recommends gcc libc6-dev
 # https://github.com/tonistiigi/xx/blob/master/README.md#go--cgo
 # cgo is required by lxkns' mntnssandbox (C constructor does setns before the Go runtime starts).
 ENV CGO_ENABLED=1
@@ -52,8 +52,11 @@ WORKDIR /src
 # We now try to cache only the dependencies, so we can speed up things in case
 # the dependencies do not change. No cache mount, so that the modules end up in
 # the layer and thus also in the CI build cache.
-COPY go.mod go.sum ./
-RUN go mod download
+RUN \
+    --mount=type=bind,source=go.mod,target=go.mod \
+    --mount=type=bind,source=go.sum,target=go.sum \
+    --mount=type=cache,target=/root/.cache/go-build \
+    go mod download ;
 
 ARG LDFLAGS="-s -w -extldflags=-static"
 ARG TAGS="osusergo,netgo"
@@ -69,6 +72,7 @@ RUN --mount=target=. \
         -ldflags="${LDFLAGS} -X main.version=${VERSION}" \
         -o /packetflix ./cmd/packetflix && \
     xx-verify --static /packetflix
+
 # Containers must grant (at least) all these capabilities, otherwise exec fails
 # with "operation not permitted".
 RUN setcap "cap_sys_admin,cap_sys_chroot,cap_sys_ptrace,cap_dac_read_search,cap_net_admin,cap_net_raw+ep" /packetflix
@@ -131,7 +135,9 @@ RUN mkdir -p /rootfs && \
     rm -rf /rootfs/usr/share/man && \
     printf 'root:x:0:0:root:/root:/usr/sbin/nologin\nnobody:x:65534:65534:nobody:/nonexistent:/usr/sbin/nologin\n' > /rootfs/etc/passwd && \
     printf 'root:x:0:\nnogroup:x:65534:\n' > /rootfs/etc/group && \
-    test -L /rootfs/bin && test -L /rootfs/lib && test -L /rootfs/sbin
+    test -L /rootfs/bin && \
+    test -L /rootfs/lib && \
+    test -L /rootfs/sbin
 
 # -- final stage -------------------------------------------------------------
 #

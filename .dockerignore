@@ -1,9 +1,5 @@
-.git/
-.github/
-*.md
-.vscode/
-deployments/
-images/
-/packetflix
-dist/
-coverage.html
+*
+!**/*.go
+!go.mod
+!go.sum
+**/*_test.go
