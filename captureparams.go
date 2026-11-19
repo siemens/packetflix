@@ -68,6 +68,24 @@ func parseCaptureParams(req *http.Request, conn *WSConn, discovery string) (*Arg
 	return args, nil
 }
 
+// resolveSuppliedArgs returns the effective capture arguments for the passed
+// capture arguments supplied by an [Admission], refreshing a stale target from
+// the discovery service at the specified "host:port" address. It neither
+// modifies the supplied arguments nor looks at the request.
+func resolveSuppliedArgs(supplied *Args, conn *WSConn, discovery string) (*Args, error) {
+	if supplied.Target == nil {
+		return nil, fmt.Errorf("missing capture target")
+	}
+	args := *supplied
+	target := *supplied.Target
+	args.Target = &target
+	if err := refreshStaleTarget(&args, conn, discovery, false); err != nil {
+		return nil, err
+	}
+	defaultNetworkInterfaces(&args)
+	return &args, nil
+}
+
 // refreshStaleTarget refreshes the target information from the discovery
 // service at the specified "host:port" address if the target lacks a network
 // namespace identifier or its identifier might have turned stale.

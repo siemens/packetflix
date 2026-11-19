@@ -88,10 +88,13 @@ type WSConn struct {
 	terminateOnce   sync.Once
 	log             *slog.Logger // logger tagged with this connection's ID.
 
-	// The watcher and the process waiter both move the connection through its
-	// states concurrently.
-	mu    sync.Mutex
-	state WSConnState // what's up??? Guarded by mu.
+	// The watcher, the process waiter, and server-side stops all move the
+	// connection through its states concurrently.
+	mu          sync.Mutex
+	state       WSConnState // what's up??? Guarded by mu.
+	closeCode   int         // close code of the first close; guarded by mu.
+	closeReason string      // close reason of the first close; guarded by mu.
+	finished    bool        // capture handler is done with this connection; guarded by mu.
 }
 
 // NewWSConn returns a new websocket connection wrapper that features an
@@ -131,6 +134,10 @@ func (c *WSConn) Watch() {
 	}
 	if cerr, ok := errors.AsType[*websocket.CloseError](err); ok {
 		c.handleClose(cerr)
+	} else {
+		c.mu.Lock()
+		c.recordClose(websocket.CloseAbnormalClosure, err.Error())
+		c.mu.Unlock()
 	}
 	// Any error means that the websocket is broken, and any close means that
 	// we're done by now. So release resources.
@@ -145,7 +152,10 @@ func (c *WSConn) Watch() {
 func (c *WSConn) handleClose(cerr *websocket.CloseError) {
 	c.mu.Lock()
 	state := c.state
-	c.state = WSConnClosed
+	if state != WSConnClosed {
+		c.state = WSConnClosed
+	}
+	c.recordClose(cerr.Code, cerr.Text)
 	c.mu.Unlock()
 	switch state {
 	case WSConnOpen:
@@ -169,6 +179,12 @@ func (c *WSConn) handleClose(cerr *websocket.CloseError) {
 // then the websocket will be closed immediately and the capture process
 // terminated.
 func (c *WSConn) InitiateGracefulClose(code int, reason string) {
+	c.initiateGracefulClose(code, reason)
+}
+
+// initiateGracefulClose implements InitiateGracefulClose, returning true if it
+// successfully initiated a graceful close handshake.
+func (c *WSConn) initiateGracefulClose(code int, reason string) bool {
 	// Close frame payloads are limited to 125 octets, including the 2 octet
 	// code, and must be valid UTF-8.
 	if len(reason) > 123 {
@@ -178,9 +194,10 @@ func (c *WSConn) InitiateGracefulClose(code int, reason string) {
 	c.mu.Lock()
 	if c.state != WSConnOpen {
 		c.mu.Unlock()
-		return
+		return false
 	}
 	c.state = WSConnClosing
+	c.recordClose(code, reason)
 	c.mu.Unlock()
 	c.log.Debug("beginning graceful websocket connection close",
 		slog.Int("code", code), slog.String("reason", reason))
@@ -189,7 +206,7 @@ func (c *WSConn) InitiateGracefulClose(code int, reason string) {
 		websocket.FormatCloseMessage(code, reason),
 		time.Now().Add(ClosingDeadline))
 	if err == nil {
-		return
+		return true
 	}
 	c.mu.Lock()
 	c.state = WSConnClosed
@@ -197,6 +214,49 @@ func (c *WSConn) InitiateGracefulClose(code int, reason string) {
 	c.log.Error("sending graceful close control message failed", xslog.Error(err))
 	c.Terminate()
 	_ = c.Close()
+	return false
+}
+
+// stop stops the capture from the server side, unless the capture handler is
+// already done with this connection: it initiates a graceful close and
+// terminates the capture process. As a client might not acknowledge the close,
+// it also bounds the remaining closing handshake to the ClosingDeadline.
+func (c *WSConn) stop(code int, reason string) {
+	c.mu.Lock()
+	finished := c.finished
+	c.mu.Unlock()
+	if finished || !c.initiateGracefulClose(code, reason) {
+		return
+	}
+	// Unlike gorilla's SetReadDeadline, the underlying connection's deadline
+	// can be set concurrently with the watcher's reads.
+	_ = c.UnderlyingConn().SetReadDeadline(time.Now().Add(ClosingDeadline))
+	c.Terminate()
+}
+
+// finish marks the capture handler being done with this connection.
+func (c *WSConn) finish() {
+	c.mu.Lock()
+	c.finished = true
+	c.mu.Unlock()
+}
+
+// recordClose records the passed close code and reason, unless there already
+// has been an earlier close. Must be called with mu locked.
+func (c *WSConn) recordClose(code int, reason string) {
+	if c.closeCode != 0 {
+		return
+	}
+	c.closeCode, c.closeReason = code, reason
+}
+
+// closeCause returns the close code and reason of the first close, whether
+// initiated by us or the client, or zero and an empty reason if the
+// connection hasn't been closed yet.
+func (c *WSConn) closeCause() (int, string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.closeCode, c.closeReason
 }
 
 // GracefullyClose runs a complete graceful close handshake and only returns

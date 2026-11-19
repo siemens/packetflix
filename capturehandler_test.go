@@ -87,6 +87,50 @@ var _ = Describe("capture handler", func() {
 
 	})
 
+	When("admitting capture requests", func() {
+
+		var events chan CaptureEvent
+
+		BeforeEach(func() {
+			events = make(chan CaptureEvent, 10)
+		})
+
+		admitting := func(args *Args) http.Handler {
+			return NewCaptureHandlerWith("",
+				WithAdmission(func(http.ResponseWriter, *http.Request) (*Args, bool) { return args, true }),
+				WithObserver(func(ev CaptureEvent) { events <- ev }))
+		}
+
+		It("reports a failed upgrade", func() {
+			rec := httptest.NewRecorder()
+			admitting(nil).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/capture", nil))
+			Expect(rec.Code).To(Equal(http.StatusBadRequest))
+			Expect(events).To(Receive(SatisfyAll(
+				HaveField("Type", CaptureFailed),
+				HaveField("Code", 0),
+				HaveField("Reason", "websocket upgrade failed"),
+				HaveField("Args", BeNil()))))
+		})
+
+		It("rejects supplied arguments without a target", func() {
+			wsurl, done := serveCapture(admitting(&Args{CaptureFilter: "udp"}))
+			_, err := readUntilClosed(dial(wsurl + "/capture"))
+			Expect(err).To(MatchError(&websocket.CloseError{
+				Code: websocket.ClosePolicyViolation,
+				Text: "missing capture target",
+			}))
+			Eventually(done).Should(BeClosed())
+			var ev CaptureEvent
+			Expect(events).To(Receive(&ev))
+			Expect(ev).To(SatisfyAll(
+				HaveField("Type", CaptureFailed),
+				HaveField("Code", websocket.ClosePolicyViolation),
+				HaveField("Args", BeNil())))
+			Expect(func() { ev.Stop(websocket.CloseNormalClosure, "nope") }).NotTo(Panic())
+		})
+
+	})
+
 	When("capturing from the current network namespace", func() {
 
 		var query string

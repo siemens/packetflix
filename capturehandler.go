@@ -31,13 +31,28 @@ type captureHandler struct {
 	discovery string // "host:port" address of the discovery service.
 	program   string // capture program to run.
 	upgrader  websocket.Upgrader
+	admit     Admission          // optional admission before upgrading.
+	observe   func(CaptureEvent) // optional capture lifecycle observer.
 }
 
 // NewCaptureHandler returns a handler for the /capture API endpoint that
 // refreshes stale capture target information from the discovery service at
 // the specified "host:port" address.
 func NewCaptureHandler(discovery string) http.Handler {
-	return &captureHandler{discovery: discovery, program: CaptureProgram}
+	return NewCaptureHandlerWith(discovery)
+}
+
+// NewCaptureHandlerWith returns a handler for the /capture API endpoint that
+// refreshes stale capture target information from the discovery service at
+// the specified "host:port" address, configured by the passed options. Without
+// any options, it behaves the same as the handler returned by
+// [NewCaptureHandler].
+func NewCaptureHandlerWith(discovery string, opts ...CaptureOption) http.Handler {
+	h := &captureHandler{discovery: discovery, program: CaptureProgram}
+	for _, opt := range opts {
+		opt(h)
+	}
+	return h
 }
 
 // ServeHTTP serves a single capture stream over a websocket connection.
@@ -50,6 +65,15 @@ func (h *captureHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			slog.Duration("duration", time.Since(started).Truncate(time.Second)))
 	}()
 
+	var supplied *Args
+	if h.admit != nil {
+		var admitted bool
+		if supplied, admitted = h.admit(w, req); !admitted {
+			conn.log.Debug("capture request not admitted")
+			return
+		}
+	}
+
 	// Upgrade the HTTP connection into a websocket connection, if possible.
 	// Otherwise, bail out as we will handle further only a correct websocket
 	// connection.
@@ -57,6 +81,7 @@ func (h *captureHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	cnx, err := h.upgrader.Upgrade(w, req, nil)
 	if err != nil {
 		conn.log.Error("websocket upgrade failed", xslog.Error(err))
+		h.notify(CaptureFailed, req, conn, nil, 0, "websocket upgrade failed")
 		return
 	}
 	conn.Conn = cnx
@@ -66,19 +91,55 @@ func (h *captureHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	}()
 	conn.log.Debug("websocket upgrade successful")
 
-	args, err := parseCaptureParams(req, conn, h.discovery)
+	var args *Args
+	if supplied != nil {
+		args, err = resolveSuppliedArgs(supplied, conn, h.discovery)
+	} else {
+		args, err = parseCaptureParams(req, conn, h.discovery)
+	}
 	if err != nil {
 		conn.log.Error("invalid capture parameters", xslog.Error(err))
-		conn.GracefullyClose(websocket.ClosePolicyViolation, err.Error())
+		h.fail(req, conn, nil, websocket.ClosePolicyViolation, err.Error())
 		return
 	}
+	h.capture(req, conn, args)
+}
+
+// notify reports a capture lifecycle event to the observer, if any.
+func (h *captureHandler) notify(typ CaptureEventType, req *http.Request, conn *WSConn, args *Args, code int, reason string) {
+	if h.observe == nil {
+		return
+	}
+	h.observe(CaptureEvent{
+		Type:    typ,
+		Request: req,
+		ConnID:  conn.ID,
+		Args:    args,
+		Code:    code,
+		Reason:  reason,
+		conn:    conn,
+	})
+}
+
+// fail reports the failed capture and then gracefully closes the websocket
+// connection with the passed code and reason. It reports first, as the client
+// controls how long the closing handshake takes.
+func (h *captureHandler) fail(req *http.Request, conn *WSConn, args *Args, code int, reason string) {
+	h.notify(CaptureFailed, req, conn, args, code, reason)
+	conn.GracefullyClose(code, reason)
+}
+
+// capture runs the capture program with the passed capture arguments,
+// streaming its packet capture data over the websocket connection until either
+// the capture program terminates or the websocket connection closes.
+func (h *captureHandler) capture(req *http.Request, conn *WSConn, args *Args) {
 	target := args.Target
 	conn.log.Debug("capture target", slog.Int("netns", target.NetNS), slog.Int("pid", target.Pid))
 	netnsref := netnsPath(uint64(target.NetNS))
 	if len(netnsref) == 0 {
 		reason := "could not locate network namespace for container"
 		conn.log.Error(reason, slog.Int("netns", target.NetNS))
-		conn.GracefullyClose(websocket.ClosePolicyViolation, reason)
+		h.fail(req, conn, args, websocket.ClosePolicyViolation, reason)
 		return
 	}
 	conn.log.Debug("capturing from network interfaces",
@@ -107,7 +168,7 @@ func (h *captureHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	lockednetns, unlocker, err := portref.Open()
 	if err != nil {
 		conn.log.Error("cannot lock netns", slog.Int("netns", target.NetNS), xslog.Error(err))
-		conn.GracefullyClose(websocket.CloseInternalServerErr, "cannot lock target network stack")
+		h.fail(req, conn, args, websocket.CloseInternalServerErr, "cannot lock target network stack")
 		return
 	}
 	defer unlocker()
@@ -145,18 +206,19 @@ func (h *captureHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		lockednetns)
 	if err != nil {
 		conn.log.Error("cannot switch to target network stack", xslog.Error(err))
-		conn.GracefullyClose(websocket.CloseInternalServerErr, "cannot switch to target network stack")
+		h.fail(req, conn, args, websocket.CloseInternalServerErr, "cannot switch to target network stack")
 		return
 	}
 	err, _ = res.(error)
 	if err != nil {
 		conn.log.Error("cannot start capture process", xslog.Error(err))
-		conn.GracefullyClose(websocket.CloseInternalServerErr, "cannot start capture process")
+		h.fail(req, conn, args, websocket.CloseInternalServerErr, "cannot start capture process")
 		return
 	}
 	// So far, so good. While things can still go south from here on, we passed
 	// at least the first few hurdles...
 	conn.Process = cmd.Process
+	h.notify(CaptureStarted, req, conn, args, 0, "")
 	var wg sync.WaitGroup
 	wg.Add(2)
 	// The watcher/reader go routine will terminate after the websocket
@@ -191,6 +253,9 @@ func (h *captureHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	}()
 	// Wait for both the watcher/reader and the process waiter to finish.
 	wg.Wait()
+	conn.finish()
+	code, reason := conn.closeCause()
+	h.notify(CaptureEnded, req, conn, args, code, reason)
 }
 
 // dumpcapArgs returns the capture program's CLI arguments for the specified
