@@ -82,12 +82,16 @@ const (
 // allows differentiating multiple (concurrent) websocket connections in the
 // logs.
 type WSConn struct {
-	state           WSConnState // what's up???
-	*websocket.Conn             // usual (gorilla) websocket connection.
-	ID              string      // unique ID string for this connection.
-	*os.Process                 // associated process with its lifetime bounded by this connection.
+	*websocket.Conn        // usual (gorilla) websocket connection.
+	ID              string // unique ID string for this connection.
+	*os.Process            // associated process with its lifetime bounded by this connection.
 	terminateOnce   sync.Once
 	log             *slog.Logger // logger tagged with this connection's ID.
+
+	// The watcher and the process waiter both move the connection through its
+	// states concurrently.
+	mu    sync.Mutex
+	state WSConnState // what's up??? Guarded by mu.
 }
 
 // NewWSConn returns a new websocket connection wrapper that features an
@@ -139,9 +143,12 @@ func (c *WSConn) Watch() {
 // acknowledge it, or it is the final close message in the handshake we
 // started.
 func (c *WSConn) handleClose(cerr *websocket.CloseError) {
-	switch c.state {
+	c.mu.Lock()
+	state := c.state
+	c.state = WSConnClosed
+	c.mu.Unlock()
+	switch state {
 	case WSConnOpen:
-		c.state = WSConnClosed
 		c.log.Debug("capture client closing",
 			slog.Int("code", cerr.Code), slog.String("reason", cerr.Text))
 		c.log.Debug("acknowledging close (ciao!)")
@@ -150,7 +157,6 @@ func (c *WSConn) handleClose(cerr *websocket.CloseError) {
 			websocket.FormatCloseMessage(cerr.Code, "ciao"),
 			time.Now().Add(ClosingDeadline))
 	case WSConnClosing:
-		c.state = WSConnClosed
 		c.log.Debug("capture client acknowledged close",
 			slog.Int("code", cerr.Code), slog.String("reason", cerr.Text))
 	}
@@ -163,18 +169,21 @@ func (c *WSConn) handleClose(cerr *websocket.CloseError) {
 // then the websocket will be closed immediately and the capture process
 // terminated.
 func (c *WSConn) InitiateGracefulClose(code int, reason string) {
-	if c.state != WSConnOpen {
-		return
-	}
 	// Close frame payloads are limited to 125 octets, including the 2 octet
 	// code, and must be valid UTF-8.
 	if len(reason) > 123 {
 		reason = reason[:123]
 	}
 	reason = strings.ToValidUTF8(reason, "")
+	c.mu.Lock()
+	if c.state != WSConnOpen {
+		c.mu.Unlock()
+		return
+	}
+	c.state = WSConnClosing
+	c.mu.Unlock()
 	c.log.Debug("beginning graceful websocket connection close",
 		slog.Int("code", code), slog.String("reason", reason))
-	c.state = WSConnClosing
 	err := c.WriteControl(
 		websocket.CloseMessage,
 		websocket.FormatCloseMessage(code, reason),
@@ -182,7 +191,9 @@ func (c *WSConn) InitiateGracefulClose(code int, reason string) {
 	if err == nil {
 		return
 	}
+	c.mu.Lock()
 	c.state = WSConnClosed
+	c.mu.Unlock()
 	c.log.Error("sending graceful close control message failed", xslog.Error(err))
 	c.Terminate()
 	_ = c.Close()
@@ -194,7 +205,10 @@ func (c *WSConn) InitiateGracefulClose(code int, reason string) {
 // asynchronous InitiateGracefulClose because there's already a Watch() on this
 // websocket as well as a Wait() on the capture process running in parallel.
 func (c *WSConn) GracefullyClose(code int, reason string) {
-	if c.state != WSConnOpen {
+	c.mu.Lock()
+	state := c.state
+	c.mu.Unlock()
+	if state != WSConnOpen {
 		return
 	}
 	c.InitiateGracefulClose(code, reason)
