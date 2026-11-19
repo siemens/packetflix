@@ -44,17 +44,9 @@ func parseCaptureParams(req *http.Request, conn *WSConn, discovery string) (*Arg
 		return nil, err
 	}
 	args := &Args{Target: target}
-
-	// If we got unlucky, then we now need to fetch up-to-date information from
-	// the discovery service: we need a correct network namespace identifier.
-	if !isCurrent(args.Target) {
-		args.NetNS = 0
-	}
-	if args.NetNS == 0 {
-		_, nifsRequested := params["nif"]
-		if err := refreshTarget(args, conn, discovery, nifsRequested); err != nil {
-			return nil, err
-		}
+	_, nifsRequested := params["nif"]
+	if err := refreshStaleTarget(args, conn, discovery, nifsRequested); err != nil {
+		return nil, err
 	}
 
 	// Now work on the separate nif URL query parameter to update/replace the
@@ -67,18 +59,39 @@ func parseCaptureParams(req *http.Request, conn *WSConn, discovery string) (*Arg
 	if nifs, ok := params["nif"]; ok && nifs[0] != "any" {
 		args.NetworkInterfaces = strings.Split(nifs[0], "/")
 	}
-	if len(args.NetworkInterfaces) == 0 || args.NetworkInterfaces[0] == "" {
-		// Last resort fallback if we don't know the exact list of network
-		// interfaces. This will remove the capture of the detail information
-		// from which specific network interface a packet comes from.
-		args.NetworkInterfaces = []string{"any"}
-	}
+	defaultNetworkInterfaces(args)
 
 	if f, ok := params["filter"]; ok {
 		args.CaptureFilter = f[0]
 	}
 	_, args.KeepChaste = params["chaste"]
 	return args, nil
+}
+
+// refreshStaleTarget refreshes the target information from the discovery
+// service at the specified "host:port" address if the target lacks a network
+// namespace identifier or its identifier might have turned stale.
+func refreshStaleTarget(args *Args, conn *WSConn, discovery string, nifsRequested bool) error {
+	// If we got unlucky, then we now need to fetch up-to-date information from
+	// the discovery service: we need a correct network namespace identifier.
+	if !isCurrent(args.Target) {
+		args.NetNS = 0
+	}
+	if args.NetNS != 0 {
+		return nil
+	}
+	return refreshTarget(args, conn, discovery, nifsRequested)
+}
+
+// defaultNetworkInterfaces falls back to the "any" network interface if the
+// capture arguments don't list any network interfaces.
+func defaultNetworkInterfaces(args *Args) {
+	if len(args.NetworkInterfaces) == 0 || args.NetworkInterfaces[0] == "" {
+		// Last resort fallback if we don't know the exact list of network
+		// interfaces. This will remove the capture of the detail information
+		// from which specific network interface a packet comes from.
+		args.NetworkInterfaces = []string{"any"}
+	}
 }
 
 // captureQuery returns the URL query parameters of the request, overridden by
