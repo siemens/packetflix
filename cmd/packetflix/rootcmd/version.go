@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
-package main
+package rootcmd
 
 import (
 	"runtime/debug"
@@ -11,15 +11,11 @@ import (
 
 const modulePath = "github.com/siemens/packetflix"
 
-// version is only ever set at link time for builds lacking VCS information,
-// such as Docker builds: -ldflags "-X main.version=…".
-var version string
-
-// buildVersion returns the semantic version of the packetflix module, as
-// either set at link time or otherwise recorded by the Go toolchain in the
-// binary's build information. It returns “(devel)” if no version is
-// available.
-func buildVersion() string {
+// buildVersion returns the passed version without any leading “v”, if
+// specified. Otherwise, it returns the semantic version of the packetflix
+// module as recorded by the Go toolchain in the binary's build information, or
+// “(devel)” if no version is available.
+func buildVersion(version string) string {
 	if version != "" {
 		return strings.TrimPrefix(version, "v")
 	}

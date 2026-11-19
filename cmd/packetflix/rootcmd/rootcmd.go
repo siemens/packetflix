@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
-package main
+package rootcmd
 
 import (
 	"context"
@@ -21,13 +21,14 @@ import (
 	"github.com/siemens/packetflix/cmd/cli/service"
 )
 
-// newRootCmd returns the Cobra "root" command, thus the packetflix service
-// itself.
-func newRootCmd() (rootCmd *cobra.Command) {
+// New returns the Cobra "root" command, thus the packetflix service itself,
+// reporting the passed version, if any, or otherwise the version of the
+// packetflix module.
+func New(version string) (rootCmd *cobra.Command) {
 	rootCmd = &cobra.Command{
 		Use:     "packetflix",
 		Short:   "Live network packet capture streaming from untouchable containers",
-		Version: buildVersion(),
+		Version: buildVersion(version),
 		Args:    cobra.NoArgs,
 		// See: https://github.com/spf13/cobra/issues/340
 		SilenceUsage: true,
@@ -43,14 +44,14 @@ func newRootCmd() (rootCmd *cobra.Command) {
 
 // serve runs the capture service until the command's context is done.
 func serve(cmd *cobra.Command, _ []string) error {
-	slog.Info("Packetflix Capture-as-a-Service", slog.String("version", buildVersion()))
+	slog.Info("Packetflix Capture-as-a-Service", slog.String("version", cmd.Root().Version))
 	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", service.GetPort(cmd)))
 	if err != nil {
 		return fmt.Errorf("cannot start capture service: %w", err)
 	}
 	server := &http.Server{
 		Handler: requestLogger(
-			newDemux(discovery.Address(cmd), discovery.IsProxying(cmd)),
+			newDemux(discovery.Address(cmd), discovery.IsProxying(cmd), cmd.Root().Version),
 			requestlog.IsLogging(cmd)),
 	}
 	slog.Info("starting capture service websocket server",

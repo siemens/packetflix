@@ -2,11 +2,10 @@
 //
 // SPDX-License-Identifier: MIT
 
-package main
+package rootcmd
 
 import (
 	"errors"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -21,16 +20,15 @@ var _ = Describe("HTTP frontend", func() {
 
 	It("reports its version", func() {
 		rec := httptest.NewRecorder()
-		versionHandler(rec, httptest.NewRequest(http.MethodGet, "/version", nil))
-		Expect(rec.Body.String()).To(MatchJSON(
-			fmt.Sprintf(`{"name":"packetflix","version":%q}`, buildVersion())))
+		versionHandler("packetflix", "1.2.3").ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/version", nil))
+		Expect(rec.Body.String()).To(MatchJSON(`{"name":"packetflix","version":"1.2.3"}`))
 	})
 
 	It("logs failing to send its version", func() {
 		logbuff := gbytes.NewBuffer()
 		slog.SetDefault(slog.New(slog.NewTextHandler(logbuff, nil)))
 
-		versionHandler(failingWriter{httptest.NewRecorder()}, httptest.NewRequest(http.MethodGet, "/version", nil))
+		versionHandler("packetflix", "1.2.3").ServeHTTP(failingWriter{httptest.NewRecorder()}, httptest.NewRequest(http.MethodGet, "/version", nil))
 		Expect(logbuff).To(gbytes.Say(`msg="cannot create /version"`))
 	})
 
@@ -38,13 +36,13 @@ var _ = Describe("HTTP frontend", func() {
 
 		It("serves the capture service API", func() {
 			rec := httptest.NewRecorder()
-			newDemux("", false).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/version", nil))
+			newDemux("", false, "").ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/version", nil))
 			Expect(rec.Code).To(Equal(http.StatusOK))
 		})
 
 		It("doesn't serve anything else unless proxying to the discovery service", func() {
 			rec := httptest.NewRecorder()
-			newDemux("", false).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+			newDemux("", false, "").ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
 			Expect(rec.Code).To(Equal(http.StatusNotFound))
 		})
 

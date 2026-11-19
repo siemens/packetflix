@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
-package main
+package rootcmd
 
 import (
 	"encoding/json"
@@ -15,20 +15,22 @@ import (
 	"github.com/siemens/packetflix"
 )
 
-// versionHandler creates a /version JSON response giving versioning
-// information about this micro service.
-func versionHandler(w http.ResponseWriter, req *http.Request) {
-	v := map[string]any{
-		"name":    "packetflix",
-		"version": buildVersion(),
-	}
-	j, err := json.Marshal(v)
-	if err != nil {
-		slog.Error("cannot create version JSON", xslog.Error(err))
-	}
-	_, err = w.Write(j)
-	if err != nil {
-		slog.Error("cannot create /version", xslog.Error(err))
+// versionHandler returns a handler creating a /version JSON response giving
+// versioning information about this micro service.
+func versionHandler(name, version string) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		v := map[string]any{
+			"name":    name,
+			"version": version,
+		}
+		j, err := json.Marshal(v)
+		if err != nil {
+			slog.Error("cannot create version JSON", xslog.Error(err))
+		}
+		_, err = w.Write(j)
+		if err != nil {
+			slog.Error("cannot create /version", xslog.Error(err))
+		}
 	}
 }
 
@@ -60,15 +62,15 @@ func requestLogger(h http.Handler, enabled bool) http.Handler {
 
 // newDemux returns the demultiplexer for our HTTP API endpoints, optionally
 // forwarding everything else to the discovery service at the specified
-// "host:port" address.
+// "host:port" address, reporting the passed version.
 //
 // For unknown reasons the "thing" reponsible for demultiplexing incomming
 // HTTP requests onto HTTP handlers is termed a "multiplexer". Yet, this is a
 // demultiplexer. Confusing. See: https://en.wikipedia.org/wiki/Multiplexer
-func newDemux(discovery string, proxyDiscovery bool) *http.ServeMux {
+func newDemux(discovery string, proxyDiscovery bool, version string) *http.ServeMux {
 	demux := http.NewServeMux()
 	demux.Handle("/capture", packetflix.NewCaptureHandler(discovery))
-	demux.HandleFunc("/version", versionHandler)
+	demux.HandleFunc("/version", versionHandler("packetflix", version))
 	if proxyDiscovery {
 		// Enable reverse proxying to the associated Ghostwire discovery service
 		// instance at (fixed) path "/" ... everything not handled otherwise

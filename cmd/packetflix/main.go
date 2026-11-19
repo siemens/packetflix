@@ -10,7 +10,13 @@ import (
 	"os/signal"
 	"runtime"
 	"syscall"
+
+	"github.com/siemens/packetflix/cmd/packetflix/rootcmd"
 )
+
+// version is only ever set at link time for builds lacking VCS information,
+// such as Docker builds: -ldflags "-X main.version=…".
+var version string
 
 func main() {
 	// Not strictly necessary, but makes life easier for lxkns/Ghostwire:
@@ -26,7 +32,7 @@ func main() {
 	defer stop()
 	// Cobra already reports any error, see also:
 	// https://github.com/spf13/cobra/issues/304
-	if err := newRootCmd().ExecuteContext(ctx); err != nil {
+	if err := rootcmd.New(version).ExecuteContext(ctx); err != nil {
 		stop()
 		os.Exit(1)
 	}

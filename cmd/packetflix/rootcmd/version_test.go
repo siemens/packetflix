@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
-package main
+package rootcmd
 
 import (
 	"runtime/debug"
@@ -14,13 +14,11 @@ import (
 var _ = Describe("module version", func() {
 
 	It("has a version", func() {
-		Expect(buildVersion()).NotTo(BeEmpty())
+		Expect(buildVersion("")).NotTo(BeEmpty())
 	})
 
-	It("prefers a version set at link time", func() {
-		DeferCleanup(func(old string) { version = old }, version)
-		version = "v1.2.3-4-gabcdef0"
-		Expect(buildVersion()).To(Equal("1.2.3-4-gabcdef0"))
+	It("prefers an explicit version", func() {
+		Expect(buildVersion("v1.2.3-4-gabcdef0")).To(Equal("1.2.3-4-gabcdef0"))
 	})
 
 	DescribeTable("from build information",

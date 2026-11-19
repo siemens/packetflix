@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
-package main
+package rootcmd
 
 import (
 	"context"
@@ -23,9 +23,9 @@ import (
 	. "github.com/thediveo/success"
 )
 
-func TestCmdPacketflix(t *testing.T) {
+func TestCmdPacketflixRootcmd(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "packetflix cmd/packetflix package")
+	RunSpecs(t, "packetflix cmd/packetflix/rootcmd package")
 }
 
 var _ = BeforeEach(func() {
@@ -52,7 +52,7 @@ func startService(args ...string) (string, *safe.Buffer) {
 
 	var logs safe.Buffer
 	ctx, cancel := context.WithCancel(context.Background())
-	rootCmd := newRootCmd()
+	rootCmd := New("")
 	// SetWriter attaches to the command's context, so set ours first.
 	rootCmd.SetContext(ctx)
 	debug.SetWriter(rootCmd, io.MultiWriter(&logs, GinkgoWriter))

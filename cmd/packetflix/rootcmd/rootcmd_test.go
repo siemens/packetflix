@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
-package main
+package rootcmd
 
 import (
 	"context"
@@ -27,7 +27,7 @@ var _ = Describe("packetflix command", func() {
 
 	It("shows help with all flags", func() {
 		var out safe.Buffer
-		rootCmd := newRootCmd()
+		rootCmd := New("")
 		rootCmd.SetArgs([]string{"--help"})
 		rootCmd.SetOut(io.MultiWriter(&out, GinkgoWriter))
 		Expect(rootCmd.Execute()).To(Succeed())
@@ -45,15 +45,15 @@ var _ = Describe("packetflix command", func() {
 
 	It("shows its version", func() {
 		var out safe.Buffer
-		rootCmd := newRootCmd()
+		rootCmd := New("")
 		rootCmd.SetArgs([]string{"--version"})
 		rootCmd.SetOut(io.MultiWriter(&out, GinkgoWriter))
 		Expect(rootCmd.Execute()).To(Succeed())
-		Expect(out.String()).To(Equal("packetflix version " + buildVersion() + "\n"))
+		Expect(out.String()).To(Equal("packetflix version " + buildVersion("") + "\n"))
 	})
 
 	It("rejects arguments", func() {
-		rootCmd := newRootCmd()
+		rootCmd := New("")
 		rootCmd.SetArgs([]string{"foo"})
 		rootCmd.SetOut(GinkgoWriter)
 		rootCmd.SetErr(GinkgoWriter)
@@ -63,7 +63,7 @@ var _ = Describe("packetflix command", func() {
 	It("fails when it cannot listen on its port", func() {
 		occupied := Successful(net.Listen("tcp", ":0"))
 		DeferCleanup(occupied.Close)
-		rootCmd := newRootCmd()
+		rootCmd := New("")
 		rootCmd.SetContext(context.Background())
 		debug.SetWriter(rootCmd, GinkgoWriter)
 		rootCmd.SetArgs([]string{"--port", strconv.Itoa(occupied.Addr().(*net.TCPAddr).Port)})
@@ -80,7 +80,7 @@ var _ = Describe("packetflix command", func() {
 		body := Successful(io.ReadAll(resp.Body))
 		Expect(resp.Body.Close()).To(Succeed())
 		Expect(resp.StatusCode).To(Equal(http.StatusOK))
-		Expect(body).To(MatchJSON(fmt.Sprintf(`{"name":"packetflix","version":%q}`, buildVersion())))
+		Expect(body).To(MatchJSON(fmt.Sprintf(`{"name":"packetflix","version":%q}`, buildVersion(""))))
 
 		resp = Successful(http.Get(baseurl + "/"))
 		Expect(resp.Body.Close()).To(Succeed())
