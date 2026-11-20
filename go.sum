@@ -178,6 +178,8 @@ github.com/stretchr/testify v1.12.1 h1:EuwCh5fleGS7H32xRwO3wRGT7DxrDhLAT6FF8MpWD
 github.com/stretchr/testify v1.12.1/go.mod h1:MDEgiDPPsNp5cuIrHPPCyornHKgEVbtFUmoNlxoYthg=
 github.com/thediveo/caps/v2 v2.0.1 h1:DmbMaw/nrOOTp9wqa079pcJBw6ZIRaF+HhYLaNvb95A=
 github.com/thediveo/caps/v2 v2.0.1/go.mod h1:kOe5tUx6LlBZKleF8uUj7mGOyD+IV92HbYWV+KqbODk=
+github.com/thediveo/certifake v0.1.0 h1:0RR0IRk4y0kRFebBdDHjVBeluOTbW7uYLjjrvlUDSYk=
+github.com/thediveo/certifake v0.1.0/go.mod h1:T/cWn7GGja5t2t3cegm8BqHdRMymHEDoXokhdBjkJz4=
 github.com/thediveo/clippy v0.2.3 h1:SaIf4zWAHeA0ul556mwRg3ZCqAzXEzWRiLDHO830ybY=
 github.com/thediveo/clippy v0.2.3/go.mod h1:pPym4mVH4T1FS/lh3gQ7SLWz2mJwZCLOXMy9kfPhB58=
 github.com/thediveo/cpus v0.11.1 h1:uDvOztk46IMlDg8UxRyPKEYoUiB+dLXy48C69G2xikE=

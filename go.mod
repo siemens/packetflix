@@ -1,6 +1,6 @@
 module github.com/siemens/packetflix
 
-go 1.26.6
+go 1.26.9
 
 require google.golang.org/grpc v1.83.2 // indirect
 
@@ -12,6 +12,7 @@ require (
 	github.com/siemens/csharg/v2 v2.0.3
 	github.com/spf13/cobra v1.10.2
 	github.com/thediveo/caps/v2 v2.0.1
+	github.com/thediveo/certifake v0.1.0
 	github.com/thediveo/clippy v0.2.3
 	github.com/thediveo/fdooze v0.3.4
 	github.com/thediveo/go-mntinfo v1.0.5
