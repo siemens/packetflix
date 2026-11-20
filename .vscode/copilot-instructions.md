@@ -70,6 +70,8 @@ In tests, prefer slice and collection helpers from `github.com/thediveo/nonstd` 
 
 Never add test code to explicitly remove or kill stale containers, as container cleanup is automatically handled by `morbyd`'s `session.WithAutoCleaning(...)`.
 
+Whenever specs test code that starts goroutines, the test suite must check for leaked goroutines using `github.com/onsi/gomega/gleak`. Put the check into a suite-wide `BeforeEach` in `package_test.go`, taking a snapshot with `Goroutines()` and registering a `DeferCleanup` that asserts `Eventually(Goroutines).Within(2 * time.Second).ProbeEvery(100 * time.Millisecond).ShouldNot(HaveLeaked(goodgos))`, together with the corresponding file descriptor leak check using `github.com/thediveo/fdooze`.
+
 For temporary directories in Ginkgo specs, do not use `GinkgoT().TempDir()`; instead use the plain stdlib together with `DeferCleanup`, for example `tmpdir := Successful(os.MkdirTemp("", "mobydav-test-"))` followed by `DeferCleanup(os.RemoveAll, tmpdir)`.
 
 ## End-to-End Tests
