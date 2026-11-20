@@ -20,6 +20,10 @@ const (
 	// Ghostwire service.
 	DefaultDiscoveryService = "127.0.0.1"
 
+	// DefaultPingInterval specifies the default interval of the websocket
+	// pings the packetflix service sends on capture connections.
+	DefaultPingInterval = 5 * time.Minute
+
 	// CaptureEnableHeader tells the Ghostwire service to serve its SPA user
 	// interface with capture button enabled.
 	CaptureEnableHeader = "Enable-Monolith"

@@ -114,6 +114,9 @@ make deploy
   defaults to port 5000.
 - `--proxy-discovery`: enables forwarding HTTP requests to the Ghostwire
   discovery service at `/`, unless they're part of the Packetflix API.
+- `--wsping-interval`: interval of websocket pings on capture connections,
+  keeping them alive through reverse proxies while a capture produces no packet
+  data; defaults to `5m`, `0` disables pings.
 
 - `--debug`: enables debugging messages.
 - `--tinted`: tints structured logging output.

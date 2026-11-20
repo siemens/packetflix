@@ -7,6 +7,7 @@ package rootcmd
 import (
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -14,8 +15,15 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"os"
 	"strconv"
+	"strings"
+	"sync/atomic"
+	"time"
 
+	"github.com/gorilla/websocket"
+	"github.com/siemens/csharg/v2/api"
 	"github.com/spf13/cobra"
 	"github.com/thediveo/clippy/debug"
 	"github.com/thediveo/safe"
@@ -42,6 +50,7 @@ var _ = Describe("packetflix command", func() {
 			ContainSubstring("--proxy-discovery"),
 			ContainSubstring("--log-requests"),
 			ContainSubstring("--log-headers"),
+			MatchRegexp(`--wsping-interval duration .*\(default 5m0s\)`),
 			ContainSubstring("--debug"),
 			ContainSubstring("--version"),
 		))
@@ -116,6 +125,45 @@ var _ = Describe("packetflix command", func() {
 		Expect(resp.Body.Close()).To(Succeed())
 		Expect(resp.StatusCode).To(Equal(http.StatusNoContent))
 	})
+
+	DescribeTable("pinging on capture connections",
+		func(interval string, minPings, maxPings int) {
+			// The discovery service takes its time to answer, so the stale
+			// target keeps the connection quiet for a while.
+			ghostwire := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				time.Sleep(700 * time.Millisecond)
+				_, _ = w.Write([]byte(`{"containers":[]}`))
+			}))
+			DeferCleanup(ghostwire.Close)
+			ghostwireAddr := ghostwire.Listener.Addr().(*net.TCPAddr)
+			baseurl, _ := startService("--wsping-interval", interval,
+				"--discovery-service", ghostwireAddr.IP.String(),
+				"--gw-port", strconv.Itoa(ghostwireAddr.Port))
+
+			target := Successful(json.Marshal(api.Target{Name: "foo", NetNS: 1, Pid: os.Getpid(), StartTime: 1}))
+			client, _ := Successful2R(websocket.DefaultDialer.Dial(
+				"ws"+strings.TrimPrefix(baseurl, "http")+"/capture?container="+url.QueryEscape(string(target)), nil))
+			DeferCleanup(func() { _ = client.Close() })
+			var pings atomic.Int32
+			client.SetPingHandler(func(string) error {
+				pings.Add(1)
+				return nil
+			})
+			Expect(client.SetReadDeadline(time.Now().Add(10 * time.Second))).To(Succeed())
+			var err error
+			for err == nil {
+				_, _, err = client.ReadMessage()
+			}
+			Expect(err).To(MatchError(&websocket.CloseError{
+				Code: websocket.ClosePolicyViolation,
+				Text: "could not locate network namespace for container",
+			}))
+			Expect(int(pings.Load())).To(SatisfyAll(
+				BeNumerically(">=", minPings), BeNumerically("<=", maxPings)))
+		},
+		Entry("at the interval", "100ms", 4, 8),
+		Entry("not when disabled", "0", 0, 0),
+	)
 
 	It("executes a command", func() {
 		var out safe.Buffer

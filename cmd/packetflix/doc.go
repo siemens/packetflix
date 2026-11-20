@@ -16,6 +16,8 @@ reverse proxies everything not part of its own API to Ghostwire.
 Capture service:
 
   - --port, -p uint16: port to expose capture service on (default 5001).
+  - --wsping-interval duration: interval of websocket pings on capture
+    connections; 0 disables pings (default 5m0s).
 
 Ghostwire discovery service:
 

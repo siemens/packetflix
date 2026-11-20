@@ -43,7 +43,8 @@ presenting a ticket:
 			capture := http.NewServeMux()
 			capture.Handle("/capture", packetflix.NewCaptureHandlerWith(gw,
 				packetflix.WithAdmission(admitTicket),
-				packetflix.WithObserver(audit)))
+				packetflix.WithObserver(audit),
+				packetflix.WithPingInterval(wsping.Interval(cmd))))
 
 			return []*http.Server{
 				{Addr: ":5001", Handler: rootcmd.LogRequests(cmd, ui)},
@@ -51,6 +52,15 @@ presenting a ticket:
 			}, nil
 		},
 	}
+
+The websocket pings keep a capture connection alive while the capture produces
+no packet data: reverse proxies close upgraded connections when the proxied
+server has sent nothing for some time, such as nginx after its
+“proxy_read_timeout”. Choose an interval well below the proxy's timeout. The
+stock packetflix service pings every 5 minutes by default, configurable using
+the “--wsping-interval” CLI flag, which [wsping.Interval] reads; downstream
+variants switch pings on for their own capture handlers using
+[packetflix.WithPingInterval].
 
 Behind a reverse proxy, the peer address of every request is the proxy's, and
 requests arrive without TLS. Nothing in packetflix decides anything based on
@@ -81,11 +91,12 @@ server's TLSConfig:
   - [LogRequests] for the “--log-requests” and “--log-headers” request
     logging, and any other middleware wrapping an [http.Handler].
   - [discovery.Address] and [discovery.IsProxying] for the discovery service
-    flags.
+    flags, and [wsping.Interval] for the websocket ping interval flag.
   - the [packetflix.CaptureOption]s: [packetflix.WithAdmission] for deciding
     about capture requests before the websocket upgrade, optionally supplying
     the capture arguments; [packetflix.WithObserver] for learning about the
-    capture lifecycle and stopping captures from the server side.
+    capture lifecycle and stopping captures from the server side; and
+    [packetflix.WithPingInterval] for keeping capture connections alive.
 
 Wrap the Rewrite function of the [httputil.ReverseProxy] returned by
 [packetflix.NewDiscoveryProxy] to add request headers. For instance, when the
@@ -120,6 +131,7 @@ package imports:
 
 [discovery.Address]: https://pkg.go.dev/github.com/siemens/packetflix/cmd/cli/discovery#Address
 [discovery.IsProxying]: https://pkg.go.dev/github.com/siemens/packetflix/cmd/cli/discovery#IsProxying
+[wsping.Interval]: https://pkg.go.dev/github.com/siemens/packetflix/cmd/cli/wsping#Interval
 [cliplugin.SetupCLI]: https://pkg.go.dev/github.com/thediveo/clippy/cliplugin#SetupCLI
 [cliplugin.BeforeCommand]: https://pkg.go.dev/github.com/thediveo/clippy/cliplugin#BeforeCommand
 */

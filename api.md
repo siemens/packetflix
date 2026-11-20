@@ -7,6 +7,11 @@ to TCP port `5001` on single-host container deployments.
 > Instead, deploy a TLS-terminating and authenticating proxy in front of
 > Packetflix with single-host container hosts.
 
+This document describes the stock Packetflix service. Downstream variants built
+using the [`cmd/packetflix/rootcmd`](cmd/packetflix/rootcmd/) package may use
+further listeners, serve different endpoints, check capture requests before the
+websocket upgrade, and use different websocket ping intervals.
+
 The following API paths are currently available:
 
 - `/version`
@@ -18,7 +23,7 @@ The following API paths are currently available:
 The version service is exposed via HTTP at the `/version` path.
 
 - parameters: _none_.
-- response: JSON document with the folowing atrributes:
+- response: JSON document with the folowing attributes:
   - `name`: name of capture service implementation, such as "packetflix"; this
     name never contains version information.
   - `version`: semantic version, such as `1.0.666`.
@@ -56,6 +61,14 @@ websocket with a close code and a reason text:
 - `1011` (internal server error): capture couldn't be started or failed; the
   reason then is the error message from `dumpcap`, if available.
 - `1000` (normal closure): the capture process terminated.
+
+While capturing, Packetflix sends websocket ping control messages every 5
+minutes by default, configurable using the `--wsping-interval` CLI flag (`0`
+disables pings). The pings keep capture connections alive through reverse
+proxies that close connections after some time without data, while a capture
+produces no packet data. Clients don't need to answer the pings, as is usual for
+websocket clients; missing pongs don't end a capture. Packetflix stops pinging
+as soon as either side begins closing the websocket.
 
 - `/capture?container=`: this is the preferred way to use the capture service,
   because it safeguards against bad luck with reused network namespace identifiers.

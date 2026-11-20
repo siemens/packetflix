@@ -16,6 +16,7 @@ import (
 	"github.com/siemens/packetflix"
 	"github.com/siemens/packetflix/cmd/cli/discovery"
 	"github.com/siemens/packetflix/cmd/cli/requestlog"
+	"github.com/siemens/packetflix/cmd/cli/wsping"
 )
 
 // NewVersionHandler returns a handler for the “/version” endpoint, responding
@@ -81,7 +82,8 @@ func requestLogger(h http.Handler, enabled bool) http.Handler {
 // NewMux returns the demultiplexer for the stock packetflix endpoints
 // “/capture” and “/version”, as well as for “/” forwarding everything else to
 // the discovery service if enabled by the passed command's “--proxy-discovery”
-// CLI flag.
+// CLI flag. The capture endpoint sends websocket pings at the interval
+// specified by the passed command's “--wsping-interval” CLI flag.
 //
 // For unknown reasons the "thing" reponsible for demultiplexing incomming
 // HTTP requests onto HTTP handlers is termed a "multiplexer". Yet, this is a
@@ -89,7 +91,8 @@ func requestLogger(h http.Handler, enabled bool) http.Handler {
 func NewMux(cmd *cobra.Command) *http.ServeMux {
 	discoveryAddr := discovery.Address(cmd)
 	demux := http.NewServeMux()
-	demux.Handle("/capture", packetflix.NewCaptureHandler(discoveryAddr))
+	demux.Handle("/capture", packetflix.NewCaptureHandlerWith(discoveryAddr,
+		packetflix.WithPingInterval(wsping.Interval(cmd))))
 	demux.Handle("/version", NewVersionHandler(cmd))
 	if discovery.IsProxying(cmd) {
 		// Enable reverse proxying to the associated Ghostwire discovery service
