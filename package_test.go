@@ -6,7 +6,9 @@ package packetflix
 
 import (
 	"fmt"
+	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -16,6 +18,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/thediveo/nonstd/xslices"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -81,4 +84,34 @@ func startTime(pid int) int64 {
 	stat := string(Successful(os.ReadFile(fmt.Sprintf("/proc/%d/stat", pid))))
 	fields := strings.Fields(stat[strings.LastIndex(stat, ")")+2:])
 	return Successful(strconv.ParseInt(fields[22-3], 10, 64))
+}
+
+// frame is a websocket frame received from the server.
+type frame struct {
+	opcode int
+	at     time.Time
+}
+
+// readFrames returns the frames the server sends on the passed raw connection
+// until the connection fails or the deadline passes. It supports only frames
+// with payloads shorter than 126 octets, such as control frames.
+func readFrames(conn net.Conn, deadline time.Time) []frame {
+	GinkgoHelper()
+	Expect(conn.SetReadDeadline(deadline)).To(Succeed())
+	var frames []frame
+	hdr := make([]byte, 2)
+	for {
+		if _, err := io.ReadFull(conn, hdr); err != nil {
+			return frames
+		}
+		if _, err := io.ReadFull(conn, make([]byte, hdr[1]&0x7f)); err != nil {
+			return frames
+		}
+		frames = append(frames, frame{opcode: int(hdr[0] & 0x0f), at: time.Now()})
+	}
+}
+
+// opcodes returns the opcodes of the passed frames.
+func opcodes(frames []frame) []int {
+	return xslices.Map(frames, func(f frame) int { return f.opcode })
 }

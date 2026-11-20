@@ -28,6 +28,10 @@ instead:
     effective capture arguments, and the close code and reason. A
     [CaptureStarted] event allows stopping the capture from the server side
     using [CaptureEvent.Stop], for instance after a maximum duration.
+  - [WithPingInterval] sends periodic websocket pings, keeping capture
+    connections alive through reverse proxies that close upgraded connections
+    after some time without data from packetflix, while a capture produces no
+    packet data.
 
 Without any options, [NewCaptureHandlerWith] behaves exactly as
 [NewCaptureHandler].

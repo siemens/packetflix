@@ -13,6 +13,7 @@ package packetflix
 import (
 	"errors"
 	"log/slog"
+	"net"
 	"os"
 	"strings"
 	"sync"
@@ -239,6 +240,65 @@ func (c *WSConn) finish() {
 	c.mu.Lock()
 	c.finished = true
 	c.mu.Unlock()
+}
+
+// startPinging sends websocket ping control messages at the passed interval
+// while the connection is open, returning an idempotent function that stops
+// pinging and waits for the pinger to have finished. The pinger also finishes
+// on its own as soon as a closing handshake begins or the connection is gone.
+// A ping that cannot be sent breaks the connection, terminating the capture
+// process.
+func (c *WSConn) startPinging(interval time.Duration) (stop func()) {
+	done := make(chan struct{})
+	finished := make(chan struct{})
+	go func() {
+		defer close(finished)
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case <-ticker.C:
+				if !c.ping() {
+					return
+				}
+			}
+		}
+	}()
+	return sync.OnceFunc(func() {
+		close(done)
+		<-finished
+	})
+}
+
+// ping sends a single websocket ping control message, returning false if the
+// connection isn't open anymore.
+func (c *WSConn) ping() bool {
+	// Holding the lock while sending the ping keeps it from slipping in after a
+	// close control message.
+	c.mu.Lock()
+	if c.state != WSConnOpen {
+		c.mu.Unlock()
+		return false
+	}
+	err := c.WriteControl(websocket.PingMessage, nil, time.Now().Add(ClosingDeadline))
+	if err == nil {
+		c.mu.Unlock()
+		return true
+	}
+	if errors.Is(err, net.ErrClosed) {
+		// The connection is already gone, so there's nothing left to do.
+		c.mu.Unlock()
+		return false
+	}
+	c.state = WSConnClosed
+	c.recordClose(websocket.CloseAbnormalClosure, "cannot send ping")
+	c.mu.Unlock()
+	c.log.Error("cannot send ping, closing websocket", xslog.Error(err))
+	c.Terminate()
+	_ = c.Close()
+	return false
 }
 
 // recordClose records the passed close code and reason, unless there already

@@ -6,12 +6,14 @@ package packetflix
 
 import (
 	"io"
+	"net"
 	"os/exec"
 	"strings"
 	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/onsi/gomega/gbytes"
+	"github.com/thediveo/nonstd/xslices"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -167,6 +169,89 @@ var _ = Describe("websocket connection", func() {
 		Expect(err).To(MatchError(
 			&websocket.CloseError{Code: websocket.CloseNormalClosure, Text: strings.Repeat("x", 122)}))
 		Eventually(done).Should(BeClosed())
+	})
+
+	When("pinging", func() {
+
+		It("pings at the interval until the client closes, and not afterwards", func() {
+			client, done := newWSPair(func(conn *WSConn) {
+				defer conn.startPinging(50 * time.Millisecond)()
+				conn.Watch()
+			})
+			frames := readFrames(client.UnderlyingConn(), time.Now().Add(400*time.Millisecond))
+			Expect(len(frames)).To(BeNumerically(">=", 4))
+			Expect(opcodes(frames)).To(HaveEach(websocket.PingMessage))
+			Expect(frames[len(frames)-1].at.Sub(frames[0].at) / time.Duration(len(frames)-1)).
+				To(BeNumerically("~", 50*time.Millisecond, 25*time.Millisecond))
+
+			Expect(client.WriteControl(websocket.CloseMessage,
+				websocket.FormatCloseMessage(websocket.CloseNormalClosure, "done"),
+				time.Now().Add(time.Second))).To(Succeed())
+			Expect(opcodes(readFrames(client.UnderlyingConn(), time.Now().Add(time.Second)))).
+				To(SatisfyAny(BeEmpty(), Equal([]int{websocket.PingMessage, websocket.CloseMessage}),
+					Equal([]int{websocket.CloseMessage})))
+			Eventually(done).Should(BeClosed())
+		})
+
+		It("stops pinging when the server begins closing", func() {
+			client, done := newWSPair(func(conn *WSConn) {
+				defer conn.startPinging(50 * time.Millisecond)()
+				time.Sleep(300 * time.Millisecond)
+				conn.InitiateGracefulClose(websocket.CloseNormalClosure, "bye")
+				conn.Watch()
+			})
+			// Never acknowledge the close, so the server keeps waiting.
+			codes := opcodes(readFrames(client.UnderlyingConn(), time.Now().Add(time.Second)))
+			Expect(codes).To(ContainElement(websocket.PingMessage))
+			Expect(codes[len(codes)-1]).To(Equal(websocket.CloseMessage))
+			Expect(codes[:len(codes)-1]).To(HaveEach(websocket.PingMessage))
+			Expect(client.UnderlyingConn().Close()).To(Succeed())
+			Eventually(done).Should(BeClosed())
+		})
+
+		It("stops pinging when asked to, also repeatedly", func() {
+			stopped := make(chan time.Time, 1)
+			client, done := newWSPair(func(conn *WSConn) {
+				stop := conn.startPinging(50 * time.Millisecond)
+				time.Sleep(200 * time.Millisecond)
+				stop()
+				stopped <- time.Now()
+				Expect(stop).NotTo(Panic())
+				conn.Watch()
+			})
+			frames := readFrames(client.UnderlyingConn(), time.Now().Add(600*time.Millisecond))
+			var stoppedAt time.Time
+			Expect(stopped).To(Receive(&stoppedAt))
+			Expect(frames).NotTo(BeEmpty())
+			Expect(xslices.Map(frames, func(f frame) time.Time { return f.at })).
+				To(HaveEach(BeTemporally("<", stoppedAt.Add(10*time.Millisecond))))
+			Expect(client.UnderlyingConn().Close()).To(Succeed())
+			Eventually(done).Should(BeClosed())
+		})
+
+		It("terminates the capture process when a ping cannot be sent", func() {
+			cmd := exec.Command("/bin/sleep", "60")
+			Expect(cmd.Start()).To(Succeed())
+			DeferCleanup(func() {
+				_ = cmd.Process.Kill()
+				_ = cmd.Wait()
+			})
+			client, done := newWSPair(func(conn *WSConn) {
+				conn.Process = cmd.Process
+				defer conn.startPinging(50 * time.Millisecond)()
+				Eventually(func() int {
+					code, _ := conn.closeCause()
+					return code
+				}).Should(Equal(websocket.CloseAbnormalClosure))
+			})
+			// Resetting the connection makes the next ping fail.
+			tcpconn := client.UnderlyingConn().(*net.TCPConn)
+			Expect(tcpconn.SetLinger(0)).To(Succeed())
+			Expect(tcpconn.Close()).To(Succeed())
+			Eventually(done).Should(BeClosed())
+			Expect(cmd.Wait()).To(MatchError(ContainSubstring("signal: terminated")))
+		})
+
 	})
 
 })

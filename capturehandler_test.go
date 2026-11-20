@@ -17,6 +17,7 @@ import (
 	"os/exec"
 	"regexp"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -130,6 +131,38 @@ var _ = Describe("capture handler", func() {
 		})
 
 	})
+
+	DescribeTable("pinging only when asked to",
+		func(opts []CaptureOption, minPings, maxPings int) {
+			// The discovery service takes its time to answer, so the stale
+			// target keeps the connection quiet for a while.
+			discovery := fakeDiscovery(func(w http.ResponseWriter, _ *http.Request) {
+				time.Sleep(700 * time.Millisecond)
+				_, _ = w.Write([]byte(`{"containers":[]}`))
+			})
+			stale := &Args{Target: &api.Target{Name: "foo", NetNS: 1, Pid: os.Getpid(), StartTime: 1}}
+			wsurl, done := serveCapture(NewCaptureHandlerWith(discovery, append([]CaptureOption{
+				WithAdmission(func(http.ResponseWriter, *http.Request) (*Args, bool) { return stale, true }),
+			}, opts...)...))
+			client := dial(wsurl + "/capture")
+			var pings atomic.Int32
+			client.SetPingHandler(func(string) error {
+				pings.Add(1)
+				return nil
+			})
+			_, err := readUntilClosed(client)
+			Expect(err).To(MatchError(&websocket.CloseError{
+				Code: websocket.ClosePolicyViolation,
+				Text: "could not locate network namespace for container",
+			}))
+			Expect(int(pings.Load())).To(BeNumerically(">=", minPings))
+			Expect(int(pings.Load())).To(BeNumerically("<=", maxPings))
+			Eventually(done).Should(BeClosed())
+		},
+		Entry("without pings", nil, 0, 0),
+		Entry("with non-positive interval", []CaptureOption{WithPingInterval(0)}, 0, 0),
+		Entry("with pings", []CaptureOption{WithPingInterval(100 * time.Millisecond)}, 4, 8),
+	)
 
 	When("capturing from the current network namespace", func() {
 

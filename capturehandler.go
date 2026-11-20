@@ -28,11 +28,12 @@ import (
 // be in the headers in order to work around a bug in the Kubernetes pod proxy
 // verb of the remote API.)
 type captureHandler struct {
-	discovery string // "host:port" address of the discovery service.
-	program   string // capture program to run.
-	upgrader  websocket.Upgrader
-	admit     Admission          // optional admission before upgrading.
-	observe   func(CaptureEvent) // optional capture lifecycle observer.
+	discovery    string // "host:port" address of the discovery service.
+	program      string // capture program to run.
+	upgrader     websocket.Upgrader
+	admit        Admission          // optional admission before upgrading.
+	observe      func(CaptureEvent) // optional capture lifecycle observer.
+	pingInterval time.Duration      // optional websocket ping interval.
 }
 
 // NewCaptureHandler returns a handler for the /capture API endpoint that
@@ -55,7 +56,40 @@ func NewCaptureHandlerWith(discovery string, opts ...CaptureOption) http.Handler
 	return h
 }
 
-// ServeHTTP serves a single capture stream over a websocket connection.
+// ServeHTTP serves a single capture stream over a websocket connection,
+// blocking until the capture has ended. It proceeds as follows:
+//
+//  1. If an [Admission] is configured, it runs first. If it refuses the
+//     request, it has already written the HTTP response; ServeHTTP then
+//     returns without upgrading and without reporting any [CaptureEvent].
+//  2. ServeHTTP upgrades the connection to a websocket. If the upgrade fails,
+//     such as for a plain HTTP request, or an Origin header not matching the
+//     Host header, the upgrader has already responded with an HTTP error
+//     status; ServeHTTP then reports [CaptureFailed] with a zero close code.
+//  3. From the upgrade on, it sends websocket pings at the configured
+//     interval, if any, until either side begins the closing handshake.
+//  4. It takes the capture arguments supplied by the admission, or otherwise
+//     parses them from the URL query parameters and “Clustershark-*” headers,
+//     with the headers taking precedence. It then refreshes a stale target
+//     from the discovery service, which might take up to [DiscoveryDeadline].
+//  5. If it cannot start the capture, it first reports [CaptureFailed] and
+//     then closes the websocket with a close code and reason as documented in
+//     api.md: 1008 for invalid arguments or an unknown network namespace,
+//     1011 for failing to start the capture program. It waits for the client
+//     to acknowledge the close.
+//  6. Otherwise, it starts the capture program inside the target's network
+//     namespace, reports [CaptureStarted], and streams the pcapng output as
+//     binary messages. The capture ends when the capture program terminates,
+//     the client closes or drops the connection, or [CaptureEvent.Stop] is
+//     called. ServeHTTP then terminates the capture program if it is still
+//     running, waits for the websocket to close, and reports [CaptureEnded]
+//     with the close code and reason of the first close, whichever side
+//     sent it.
+//
+// The observer is called synchronously from the request's goroutine. As
+// ServeHTTP hijacks the connection, [http.Server.Shutdown] neither waits for
+// nor ends running captures. ServeHTTP never looks at the request's remote
+// address or TLS state.
 func (h *captureHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	started := time.Now()
 	conn := NewWSConn()
@@ -90,6 +124,9 @@ func (h *captureHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		_ = conn.Close()
 	}()
 	conn.log.Debug("websocket upgrade successful")
+	if h.pingInterval > 0 {
+		defer conn.startPinging(h.pingInterval)()
+	}
 
 	var args *Args
 	if supplied != nil {

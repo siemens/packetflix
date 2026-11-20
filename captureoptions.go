@@ -6,6 +6,7 @@ package packetflix
 
 import (
 	"net/http"
+	"time"
 )
 
 // CaptureOption configures a capture handler created by
@@ -42,6 +43,22 @@ func WithObserver(observe func(CaptureEvent)) CaptureOption {
 	return func(h *captureHandler) { h.observe = observe }
 }
 
+// WithPingInterval returns a [CaptureOption] that sends websocket ping control
+// messages at the passed interval on every capture websocket connection, from
+// the websocket upgrade until either side begins the closing handshake. A
+// non-positive interval sends no pings, as does the capture handler returned by
+// [NewCaptureHandler].
+//
+// Pings keep connections alive that pass through reverse proxies closing
+// upgraded connections when the proxied server sends nothing for some time,
+// such as nginx with its “proxy_read_timeout”, while a capture produces no
+// packet data. Clients answering pings with pongs is not required, and missing
+// pongs don't end a capture. A ping that cannot be sent is handled as a broken
+// websocket connection, terminating the capture.
+func WithPingInterval(interval time.Duration) CaptureOption {
+	return func(h *captureHandler) { h.pingInterval = interval }
+}
+
 // CaptureEventType tells which lifecycle event of a capture a [CaptureEvent]
 // reports.
 type CaptureEventType int
@@ -69,8 +86,10 @@ type CaptureEvent struct {
 	Args *Args
 	// For CaptureFailed and CaptureEnded, the websocket close code and reason
 	// of the first close, whether sent by packetflix, a [CaptureEvent.Stop],
-	// or the client. Code is zero if the websocket upgrade failed, as the
-	// upgrade then already responded with an HTTP error status.
+	// or the client. If the connection broke instead, such as when a ping
+	// could not be sent, Code is 1006 (abnormal closure) with the error as
+	// the reason. Code is zero if the websocket upgrade failed, as the upgrade
+	// then already responded with an HTTP error status.
 	Code   int
 	Reason string
 
