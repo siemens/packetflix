@@ -38,5 +38,10 @@ Miscellaneous:
   - --help, -h: help for packetflix.
 
 Use “packetflix --help” to get the list of CLI flags actually available.
+
+# Downstream Customizations
+
+Downstream customizations reuse the packetflix command from package
+[github.com/siemens/packetflix/cmd/packetflix/rootcmd].
 */
 package main

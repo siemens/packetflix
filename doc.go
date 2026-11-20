@@ -31,5 +31,8 @@ instead:
 
 Without any options, [NewCaptureHandlerWith] behaves exactly as
 [NewCaptureHandler].
+
+See package [github.com/siemens/packetflix/cmd/packetflix/rootcmd] for how to
+assemble a packetflix service variant.
 */
 package packetflix

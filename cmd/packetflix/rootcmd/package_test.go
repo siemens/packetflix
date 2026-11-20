@@ -42,17 +42,25 @@ var _ = BeforeEach(func() {
 	})
 })
 
-// startService runs the packetflix root command with the passed CLI args on a
-// free port until the end of the current spec, returning the base URL of the
-// service as well as its logs.
+// startService runs the stock packetflix root command with the passed CLI args
+// on a free port until the end of the current spec, returning the base URL of
+// the service as well as its logs.
 func startService(args ...string) (string, *safe.Buffer) {
+	GinkgoHelper()
+	return startVariant(Variant{}, args...)
+}
+
+// startVariant runs the root command of the passed variant with the passed CLI
+// args on a free stock port until the end of the current spec, returning the
+// base URL of the first server as well as the logs.
+func startVariant(v Variant, args ...string) (string, *safe.Buffer) {
 	GinkgoHelper()
 	// Requests to the service use the default transport and its idle connections.
 	DeferCleanup(AssignableTo[*http.Transport](http.DefaultTransport).CloseIdleConnections)
 
 	var logs safe.Buffer
 	ctx, cancel := context.WithCancel(context.Background())
-	rootCmd := New("")
+	rootCmd := New(v)
 	// SetWriter attaches to the command's context, so set ours first.
 	rootCmd.SetContext(ctx)
 	debug.SetWriter(rootCmd, io.MultiWriter(&logs, GinkgoWriter))

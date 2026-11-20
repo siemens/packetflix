@@ -10,10 +10,20 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/spf13/cobra"
 	"github.com/thediveo/nonstd/xslog"
 
 	"github.com/siemens/packetflix"
+	"github.com/siemens/packetflix/cmd/cli/discovery"
+	"github.com/siemens/packetflix/cmd/cli/requestlog"
 )
+
+// NewVersionHandler returns a handler for the “/version” endpoint, responding
+// with a JSON document giving the name and version of the passed command's
+// root command.
+func NewVersionHandler(cmd *cobra.Command) http.Handler {
+	return versionHandler(cmd.Root().Name(), cmd.Root().Version)
+}
 
 // versionHandler returns a handler creating a /version JSON response giving
 // versioning information about this micro service.
@@ -32,6 +42,14 @@ func versionHandler(name, version string) http.HandlerFunc {
 			slog.Error("cannot create /version", xslog.Error(err))
 		}
 	}
+}
+
+// LogRequests returns a handler that logs all HTTP and websocket requests
+// before handing them to the passed handler, if enabled by the passed
+// command's “--log-requests” or “--log-headers” CLI flags. Otherwise, it
+// returns the passed handler unchanged.
+func LogRequests(cmd *cobra.Command, h http.Handler) http.Handler {
+	return requestLogger(h, requestlog.IsLogging(cmd))
 }
 
 // A HTTP request logging handler that sits in front of the (de)mux so it sees
@@ -60,23 +78,25 @@ func requestLogger(h http.Handler, enabled bool) http.Handler {
 	})
 }
 
-// newDemux returns the demultiplexer for our HTTP API endpoints, optionally
-// forwarding everything else to the discovery service at the specified
-// "host:port" address, reporting the passed version.
+// NewMux returns the demultiplexer for the stock packetflix endpoints
+// “/capture” and “/version”, as well as for “/” forwarding everything else to
+// the discovery service if enabled by the passed command's “--proxy-discovery”
+// CLI flag.
 //
 // For unknown reasons the "thing" reponsible for demultiplexing incomming
 // HTTP requests onto HTTP handlers is termed a "multiplexer". Yet, this is a
 // demultiplexer. Confusing. See: https://en.wikipedia.org/wiki/Multiplexer
-func newDemux(discovery string, proxyDiscovery bool, version string) *http.ServeMux {
+func NewMux(cmd *cobra.Command) *http.ServeMux {
+	discoveryAddr := discovery.Address(cmd)
 	demux := http.NewServeMux()
-	demux.Handle("/capture", packetflix.NewCaptureHandler(discovery))
-	demux.HandleFunc("/version", versionHandler("packetflix", version))
-	if proxyDiscovery {
+	demux.Handle("/capture", packetflix.NewCaptureHandler(discoveryAddr))
+	demux.Handle("/version", NewVersionHandler(cmd))
+	if discovery.IsProxying(cmd) {
 		// Enable reverse proxying to the associated Ghostwire discovery service
 		// instance at (fixed) path "/" ... everything not handled otherwise
 		// will thus end up in the Ghostwire service and its SPA.
 		slog.Debug("forwarding to discovery service enabled")
-		demux.Handle("/", packetflix.NewDiscoveryProxy(discovery))
+		demux.Handle("/", packetflix.NewDiscoveryProxy(discoveryAddr))
 	}
 	return demux
 }

@@ -282,6 +282,16 @@ shows that `setns` is in fact **allowed**:
 - [HTTP/websocket API](api.md) documentation.
 - [Service Sequence Diagrams](sequences.md).
 
+## Downstream Customizations
+
+Downstream Go modules can build their own packetflix variants without forking:
+the [`cmd/packetflix/rootcmd`](cmd/packetflix/rootcmd/) package assembles the
+service from the same parts as the stock binary. A variant can use its own name,
+version, and CLI flags, run multiple listeners each with their own endpoints,
+middleware, and optional TLS, decide about capture requests before the websocket
+upgrade, supply the capture arguments, and observe and stop captures.
+Please see the package documentation for details.
+
 # Contributing
 
 Please see [CONTRIBUTING.md](CONTRIBUTING.md).

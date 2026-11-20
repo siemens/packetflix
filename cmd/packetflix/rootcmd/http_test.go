@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 
 	"github.com/onsi/gomega/gbytes"
+	"github.com/spf13/cobra"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -36,13 +37,13 @@ var _ = Describe("HTTP frontend", func() {
 
 		It("serves the capture service API", func() {
 			rec := httptest.NewRecorder()
-			newDemux("", false, "").ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/version", nil))
+			NewMux(&cobra.Command{}).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/version", nil))
 			Expect(rec.Code).To(Equal(http.StatusOK))
 		})
 
 		It("doesn't serve anything else unless proxying to the discovery service", func() {
 			rec := httptest.NewRecorder()
-			newDemux("", false, "").ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+			NewMux(&cobra.Command{}).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
 			Expect(rec.Code).To(Equal(http.StatusNotFound))
 		})
 
