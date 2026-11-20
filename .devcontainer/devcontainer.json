@@ -43,6 +43,9 @@
     "postCreateCommand": {
         "go-for-root": "echo 'Defaults:vscode secure_path = \"/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/go/bin\"' | sudo tee -a /etc/sudoers.d/vscode"
     },
+    // Trust the host's CA certificates (as exported by VS Code for Node.js
+    // only) in all programs; no-op when there's no such export.
+    "postAttachCommand": "bash .devcontainer/host-ca-certificates.sh",
     "customizations": {
         "vscode": {
             "extensions": [
